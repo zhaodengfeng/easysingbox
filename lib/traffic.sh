@@ -215,14 +215,12 @@ view_traffic_stats() {
     local month
     month=$(date +%Y-%m)
 
-    echo "╔══════════════════════════════════════╗"
-    echo "║          流量统计                    ║"
-    echo "╠══════════════════════════════════════╣"
-    echo "║  1. 本月流量 ($month)                ║"
-    echo "║  2. 累计总流量                       ║"
-    echo "║  3. 历史月份                         ║"
-    echo "║  0. 返回                             ║"
-    echo "╚══════════════════════════════════════╝"
+    echo "流量统计"
+    echo "  1. 本月流量 ($month)"
+    echo "  2. 累计总流量"
+    echo "  3. 历史月份"
+    echo "  0. 返回"
+    echo ""
     echo ""
     read -rp "请选择: " choice
 

@@ -113,9 +113,8 @@ view_share_links() {
     users=$(jq -r '.users[].name' "$USERS_FILE" 2>/dev/null)
     [[ -z "$users" ]] && { echo "暂无用户"; return; }
 
-    echo "╔══════════════════════════════════════╗"
-    echo "║          分享链接 / 二维码           ║"
-    echo "╠══════════════════════════════════════╣"
+    echo "分享链接 / 二维码"
+    echo ""
     echo ""
 
     echo "选择用户:"

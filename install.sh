@@ -21,9 +21,7 @@ error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # ─── Header ───────────────────────────────────────────────────────────────
 
-echo "╔══════════════════════════════════════╗"
-echo "║    easy-sing-box 安装程序            ║"
-echo "╚══════════════════════════════════════╝"
+echo "easy-sing-box 安装程序"
 echo ""
 
 if [[ $EUID -ne 0 ]]; then
@@ -361,9 +359,7 @@ ln -sf "$TARGET_DIR/easysingbox.sh" /usr/local/bin/easysingbox
 # ─── Step 7: Post-Install ─────────────────────────────────────────────────
 
 echo ""
-echo "╔══════════════════════════════════════╗"
-echo "║        安装完成                      ║"
-echo "╚══════════════════════════════════════╝"
+echo "安装完成"
 echo ""
 echo "安装路径: $TARGET_DIR"
 echo "命令:     easysingbox"
