@@ -241,10 +241,10 @@ request_acme_cert() {
     local domain="$1"
     local email="${2:-}"
 
-    # Check if acme.sh is installed
-    if ! command -v acme.sh &>/dev/null; then
+    # Check if acme.sh is installed and its directory exists
+    if ! command -v acme.sh &>/dev/null || [[ ! -d "$HOME/.acme.sh" ]]; then
         echo "正在安装 acme.sh ..."
-        curl -s https://get.acme.sh | sh -s email=test@example.com \
+        curl -fsSL https://get.acme.sh | sh -s email=test@example.com \
             || { echo "acme.sh 安装失败"; return 1; }
         export PATH="$HOME/.acme.sh:$PATH"
     fi
