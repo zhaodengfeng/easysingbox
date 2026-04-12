@@ -15,8 +15,7 @@ detect_arch() {
 
 detect_os() {
     if [[ -f /etc/os-release ]]; then
-        . /etc/os-release
-        echo "$ID"
+        grep -E '^ID=' /etc/os-release | head -1 | cut -d= -f2 | tr -d '"'
     elif [[ -f /etc/redhat-release ]]; then
         echo "centos"
     else
