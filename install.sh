@@ -41,9 +41,8 @@ OS_VERSION=""
 PKG_MGR="unknown"
 
 if [[ -f /etc/os-release ]]; then
-    . /etc/os-release
-    OS="$ID"
-    OS_VERSION="$VERSION_ID"
+    OS=$(grep -E '^ID=' /etc/os-release | head -1 | cut -d= -f2 | tr -d '"')
+    OS_VERSION=$(grep -E '^VERSION_ID=' /etc/os-release | head -1 | cut -d= -f2 | tr -d '"')
 fi
 
 case "$OS" in

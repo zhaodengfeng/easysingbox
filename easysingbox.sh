@@ -4,7 +4,7 @@ set -euo pipefail
 # easysingbox.sh — sing-box 代理协议一键部署方案
 # Repo: https://github.com/zhaodengfeng/easysingbox
 
-readonly VERSION="0.1.0"
+readonly VERSION="0.2.0"
 readonly INSTALL_DIR="/opt/easy-singbox"
 readonly CONFIG_DIR="${INSTALL_DIR}/config"
 readonly TLS_DIR="${INSTALL_DIR}/tls"
