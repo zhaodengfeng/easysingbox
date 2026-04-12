@@ -2,50 +2,66 @@
 # protocols/hysteria2.sh
 
 prompt_hysteria2() {
-    read -rp "请输入域名: " HY2_DOMAIN
-    while ! validate_domain "$HY2_DOMAIN"; do
-        read -rp "域名格式无效，请重新输入: " HY2_DOMAIN
-    done
+    # Accept optional positional params for one-command install
+    # $1 domain  $2 port  $3 email  $4 hop (y/N)  $5 hop_start  $6 hop_end
+    local input_domain="${1:-}"
+    local input_port="${2:-}"
+    local input_email="${3:-}"
+    local input_hop="${4:-}"
 
-    ensure_certificate "$HY2_DOMAIN" || return 1
-
-    local port
-    port=$(prompt_port "8443")
-    HY2_PORT=$port
-
-    # Port hopping option
-    echo ""
-    echo "是否启用端口跳跃（Port Hopping）？"
-    echo "端口跳跃可抗封锁，GFW 需扫描大量 UDP 端口才能检测"
-    read -rp "启用端口跳跃？[y/N]: " enable_hop
-    if [[ "$enable_hop" =~ ^[Yy]$ ]]; then
-        echo ""
-        echo "提示: 端口跳跃通过 iptables 将指定范围的 UDP 流量转发到监听端口 $port"
-        echo "      客户端将在该范围内随机选择端口连接"
-        echo ""
-        read -rp "跳跃起始端口 [默认: 20000]: " hop_start
-        hop_start="${hop_start:-20000}"
-        read -rp "跳跃结束端口 [默认: 30000]: " hop_end
-        hop_end="${hop_end:-30000}"
-
-        # Validate port range
-        if [[ ! "$hop_start" =~ ^[0-9]+$ ]] || [[ ! "$hop_end" =~ ^[0-9]+$ ]] || \
-           (( hop_start < 1 || hop_start > 65535 || hop_end < 1 || hop_end > 65535 || hop_start > hop_end )); then
-            echo "无效的端口范围，跳过端口跳跃"
-            HY2_HOP_ENABLED=false
-        else
-            HY2_HOP_START=$hop_start
-            HY2_HOP_END=$hop_end
-            HY2_HOP_ENABLED=true
+    if [[ -n "$input_domain" ]]; then
+        if ! validate_domain "$input_domain"; then
+            echo "域名格式无效: $input_domain"
+            return 1
         fi
+        HY2_DOMAIN="$input_domain"
+        HY2_PORT="${input_port:-8443}"
+        HY2_EMAIL="$input_email"
     else
-        HY2_HOP_ENABLED=false
+        # Menu mode: one-command style, only domain is required
+        read -rp "请输入域名: " HY2_DOMAIN
+        while ! validate_domain "$HY2_DOMAIN"; do
+            read -rp "域名格式无效，请重新输入: " HY2_DOMAIN
+        done
+        HY2_PORT=8443
+        # Check if port is in use, if so pick a random available port
+        if ! check_port_available "$HY2_PORT"; then
+            local picked
+            picked=$(gen_port)
+            if [[ -z "$picked" ]]; then
+                echo "无可用端口"
+                return 1
+            fi
+            HY2_PORT="$picked"
+        fi
+        HY2_EMAIL=""
     fi
 
-    # Warn about UDP
-    echo ""
-    echo "注意: Hysteria 2 使用 QUIC (UDP) 协议"
-    echo "如果服务器有 UDP 防火墙，可能无法正常连接"
+    ensure_certificate "$HY2_DOMAIN" "$HY2_EMAIL" || return 1
+
+    # Port hopping: default enabled, range 20000-30000
+    if [[ -n "$input_hop" ]]; then
+        if [[ "$input_hop" =~ ^[Yy]$ ]]; then
+            HY2_HOP_START="${5:-20000}"
+            HY2_HOP_END="${6:-30000}"
+            HY2_HOP_ENABLED=true
+        else
+            HY2_HOP_ENABLED=false
+        fi
+    else
+        HY2_HOP_ENABLED=true
+        HY2_HOP_START=20000
+        HY2_HOP_END=30000
+    fi
+
+    # Validate port range if hopping enabled
+    if [[ "$HY2_HOP_ENABLED" == "true" ]]; then
+        if [[ ! "$HY2_HOP_START" =~ ^[0-9]+$ ]] || [[ ! "$HY2_HOP_END" =~ ^[0-9]+$ ]] || \
+           (( HY2_HOP_START < 1 || HY2_HOP_START > 65535 || HY2_HOP_END < 1 || HY2_HOP_END > 65535 || HY2_HOP_START > HY2_HOP_END )); then
+            echo "无效的端口范围，跳过端口跳跃"
+            HY2_HOP_ENABLED=false
+        fi
+    fi
 }
 
 # Setup iptables rules for port hopping

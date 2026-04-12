@@ -240,7 +240,7 @@ check_certificate_status() {
 
 request_acme_cert() {
     local domain="$1"
-    local email
+    local email="${2:-}"
 
     # Check if acme.sh is installed
     if ! command -v acme.sh &>/dev/null; then
@@ -250,10 +250,12 @@ request_acme_cert() {
         export PATH="$HOME/.acme.sh:$PATH"
     fi
 
-    read -rp "请输入用于申请证书的邮箱地址: " email
-    while ! validate_email "$email"; do
-        read -rp "邮箱格式无效，请重新输入: " email
-    done
+    if [[ -z "$email" ]]; then
+        read -rp "请输入用于申请证书的邮箱地址: " email
+        while ! validate_email "$email"; do
+            read -rp "邮箱格式无效，请重新输入: " email
+        done
+    fi
 
     echo "正在为 $domain 申请证书 ..."
     if acme.sh --issue --standalone -d "$domain" --server letsencrypt \
@@ -273,6 +275,7 @@ request_acme_cert() {
 
 ensure_certificate() {
     local domain="$1"
+    local email="${2:-}"
 
     # Try to reuse existing cert
     local status
@@ -285,7 +288,7 @@ ensure_certificate() {
             ;;
         expiring|expired|mismatch)
             echo "证书状态: $status，正在续签 ..."
-            if ! request_acme_cert "$domain"; then
+            if ! request_acme_cert "$domain" "$email"; then
                 echo "续签失败"
                 return 1
             fi
@@ -297,7 +300,7 @@ ensure_certificate() {
             else
                 echo "未找到证书，正在申请 ..."
             fi
-            if ! request_acme_cert "$domain"; then
+            if ! request_acme_cert "$domain" "$email"; then
                 echo "申请失败"
                 return 1
             fi
