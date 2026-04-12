@@ -1,0 +1,150 @@
+# easy-sing-box
+
+sing-box 代理协议一键部署脚本，支持 10 种协议、多用户管理、流量统计与限额管控。
+
+## 特性
+
+- **10 种代理协议**: VLESS-Reality、VLESS-WS、VLESS-gRPC、VMess-WS、Trojan、Shadowsocks、ShadowTLS、Hysteria 2、TUIC v5、AnyTLS
+- **多用户管理**: 添加/删除/启用/禁用用户，支持用户跨协议使用
+- **流量统计**: cron 每 5 分钟自动采集，月度/累计流量统计
+- **流量限额**: 月度 + 总限额，超限自动封禁，到期自动解封
+- **证书管理**: acme.sh 自动申请，6 种状态检测，跨协议复用
+- **分享链接**: 自动生成，支持二维码
+- **纯 Bash**: 零外部依赖（除系统包），单文件入口
+
+## 快速开始
+
+```bash
+# 安装
+git clone https://github.com/zhaodengfeng/easysingbox.git
+cd easysingbox
+sudo bash install.sh
+
+# 运行
+sudo easysingbox
+```
+
+安装完成后，运行 `easysingbox` 即可进入交互式管理菜单。
+
+## 管理菜单
+
+```
+╔══════════════════════════════════════════════╗
+║         easy-sing-box v0.1.0                 ║
+╠══════════════════════════════════════════════╣
+║  【协议管理】                                ║
+║  1.  安装 VLESS + Reality                    ║
+║  2.  安装 VLESS + WebSocket + TLS            ║
+║  3.  安装 VLESS + gRPC + TLS                 ║
+║  4.  安装 VMess + WebSocket + TLS            ║
+║  5.  安装 Trojan + TLS                       ║
+║  6.  安装 Shadowsocks                        ║
+║  7.  安装 ShadowTLS + Shadowsocks            ║
+║  8.  安装 Hysteria 2                         ║
+║  9.  安装 TUIC v5                            ║
+║  10. 安装 AnyTLS                             ║
+╠══════════════════════════════════════════════╣
+║  【用户管理】                                ║
+║  11. 添加用户                                ║
+║  12. 删除用户                                ║
+║  13. 启用/禁用用户                           ║
+║  14. 重置用户流量                            ║
+║  15. 设置用户流量限额                        ║
+║  16. 查看用户列表及流量                      ║
+╠══════════════════════════════════════════════╣
+║  【服务管理】                                ║
+║  17. 查看所有协议状态                        ║
+║  18. 启动/停止/重启指定协议                  ║
+║  19. 卸载指定协议                            ║
+║  20. 升级 sing-box                           ║
+║  21. 查看分享链接/二维码                     ║
+║  22. 查看流量统计（本月/累计）               ║
+║  0. 退出                                     ║
+╚══════════════════════════════════════════════╝
+```
+
+## 支持的系统
+
+- Debian / Ubuntu
+- CentOS / Rocky Linux / AlmaLinux / Fedora
+- Alpine Linux
+
+支持 amd64 和 arm64 架构。
+
+## 目录结构
+
+```
+/opt/easy-singbox/
+├── easysingbox.sh              # 主入口
+├── bin/
+│   └── sing-box                # sing-box 二进制
+├── config/
+│   └── {protocol}/
+│       ├── inbound.json        # 协议配置
+│       └── share-link/
+│           └── {username}.txt  # 分享链接
+├── tls/                        # 证书目录
+├── service/                    # systemd 服务
+├── state.json                  # 全局状态
+├── users.json                  # 用户数据库
+└── traffic/
+    ├── monthly/                # 月度流量
+    └── total.json              # 累计流量
+```
+
+## 项目结构
+
+```
+easysingbox/
+├── easysingbox.sh              # 主入口 — 菜单 + 协议分发
+├── install.sh                  # 安装脚本
+├── lib/
+│   ├── common.sh               # 公共函数（端口、UUID、证书、服务管理）
+│   ├── install.sh              # sing-box 安装与升级
+│   ├── users.sh                # 用户管理（增删改查、限额）
+│   ├── traffic.sh              # 流量采集、统计、限额检查、月度重置
+│   ├── rebuild.sh              # 配置重建（用户变更后自动重建）
+│   └── share-link.sh           # 10 种协议分享链接生成
+└── protocols/
+    ├── vless-reality.sh        # VLESS + Reality（无需域名）
+    ├── vless-ws.sh             # VLESS + WebSocket + TLS
+    ├── vless-grpc.sh           # VLESS + gRPC + TLS
+    ├── vmess-ws.sh             # VMess + WebSocket + TLS
+    ├── trojan.sh               # Trojan + TLS
+    ├── shadowsocks.sh          # Shadowsocks 2022（无需域名）
+    ├── shadowtls.sh            # ShadowTLS + Shadowsocks
+    ├── hysteria2.sh            # Hysteria 2（QUIC）
+    ├── tuic.sh                 # TUIC v5（QUIC）
+    └── anytls.sh               # AnyTLS（sing-box 1.10 新增）
+```
+
+## 协议说明
+
+| 协议 | 需域名 | 需证书 | 传输层 | 说明 |
+|------|--------|--------|--------|------|
+| VLESS + Reality | ❌ | ❌ | TCP | 无需域名，内置 Reality 伪装 |
+| VLESS + WS + TLS | ✅ | ✅ | WS | 可套 CDN |
+| VLESS + gRPC + TLS | ✅ | ✅ | gRPC | 可套 CDN |
+| VMess + WS + TLS | ✅ | ✅ | WS | 可套 CDN |
+| Trojan + TLS | ✅ | ✅ | TCP | 标准 Trojan |
+| Shadowsocks | ❌ | ❌ | TCP/UDP | 2022 多用户 AEAD |
+| ShadowTLS | ✅ | ✅ | TCP | TLS 伪装层 + SS |
+| Hysteria 2 | ✅ | ✅ | QUIC | 抗封锁，UDP-based |
+| TUIC v5 | ✅ | ✅ | QUIC | 低延迟 |
+| AnyTLS | ✅ | ✅ | TCP | sing-box 1.10 新增 |
+
+## 流量统计
+
+流量统计通过 sing-box 的 `clash_api` 实现：
+
+1. 每个协议实例配置独立的 `clash_api` 端口（19090-19099）
+2. cron 每 5 分钟执行一次 `easysingbox.sh --collect-traffic`
+3. 通过 `/connections` 端点采集活跃连接的上行/下行字节数
+4. 计算 delta 增量，累加到月度 + 总流量
+5. 自动检查流量限额，超限封禁，月度到期解封
+
+> **注意**: sing-box 的 clash_api 不提供精确的 per-user 统计，当前方案通过连接级数据做均匀分配近似值。
+
+## 许可证
+
+MIT
