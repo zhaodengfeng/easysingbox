@@ -6,6 +6,7 @@ set -euo pipefail
 # 用法 2: git clone 后 sudo bash install.sh
 
 readonly TARGET_DIR="/opt/easy-singbox"
+readonly INSTALLER_VERSION="0.1.1"
 REPO_URL="https://raw.githubusercontent.com/zhaodengfeng/easysingbox/main"
 
 # ─── Colors ───────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # ─── Header ───────────────────────────────────────────────────────────────
 
-echo "easy-sing-box 一键安装"
+echo "easy-sing-box 一键安装 v${INSTALLER_VERSION}"
 echo ""
 
 if [[ $EUID -ne 0 ]]; then
