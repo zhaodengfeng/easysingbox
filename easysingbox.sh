@@ -253,6 +253,18 @@ uninstall_protocol() {
     # Stop service
     stop_service "$protocol"
 
+    # Remove port hopping rules if hysteria2
+    if [[ "$protocol" == "hysteria2" ]]; then
+        local hp_start hp_end hp_port
+        hp_start=$(jq -r '.protocols["hysteria2"].hop_start // empty' "$STATE_FILE" 2>/dev/null)
+        hp_end=$(jq -r '.protocols["hysteria2"].hop_end // empty' "$STATE_FILE" 2>/dev/null)
+        hp_port=$(jq -r '.protocols["hysteria2"].port // empty' "$STATE_FILE" 2>/dev/null)
+        if [[ -n "$hp_start" ]] && [[ -n "$hp_end" ]] && [[ -n "$hp_port" ]]; then
+            remove_port_hopping "$hp_port" "$hp_start" "$hp_end"
+            echo "端口跳跃 iptables 规则已清理"
+        fi
+    fi
+
     # Remove service file
     local service_name
     service_name=$(get_service_name "$protocol")

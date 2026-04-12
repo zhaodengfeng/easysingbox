@@ -81,7 +81,15 @@ generate_share_link() {
         hysteria2)
             local domain
             domain=$(jq -r '.inbounds[0].tls.server_name // ""' "${CONFIG_DIR}/${protocol}/inbound.json")
-            link="hysteria2://${password}@${domain}:${port}?sni=${domain}&insecure=0#${username}"
+            local link_base="hysteria2://${password}@${domain}:${port}?sni=${domain}&insecure=0"
+            # Add server_ports for port hopping support
+            local hop_start hop_end
+            hop_start=$(jq -r '.protocols["hysteria2"].hop_start // empty' "$STATE_FILE" 2>/dev/null)
+            hop_end=$(jq -r '.protocols["hysteria2"].hop_end // empty' "$STATE_FILE" 2>/dev/null)
+            if [[ -n "$hop_start" ]] && [[ -n "$hop_end" ]]; then
+                link_base="${link_base}&mport=${hop_start}-${hop_end}"
+            fi
+            link="${link_base}#${username}"
             ;;
         tuic)
             local domain
