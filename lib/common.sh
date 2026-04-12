@@ -63,7 +63,7 @@ gen_port() {
             echo "$port"
             return
         fi
-        (( i++ ))
+        i=$(( i + 1 ))
     done
     echo ""
     return 1
@@ -121,7 +121,7 @@ atomic_write() {
     local file="$1"
     local content="$2"
     local tmp="${file}.tmp"
-    echo "$content" > "$tmp"
+    printf '%s\n' "$content" > "$tmp"
     mv "$tmp" "$file"
 }
 
@@ -173,7 +173,8 @@ update_protocol_status() {
     local protocol="$1"
     local status="$2"
     if [[ -f "$STATE_FILE" ]]; then
-        jq ".protocols[\"$protocol\"].status = \"$status\"" \
+        jq --arg proto "$protocol" --arg status "$status" \
+            '.protocols[$proto].status = $status' \
             "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
     fi
 }
@@ -181,7 +182,8 @@ update_protocol_status() {
 delete_protocol_state() {
     local protocol="$1"
     if [[ -f "$STATE_FILE" ]]; then
-        jq "del(.protocols[\"$protocol\"]) | del(.traffic_snapshot[\"$protocol\"])" \
+        jq --arg proto "$protocol" \
+            'del(.protocols[$proto]) | del(.traffic_snapshot[$proto])' \
             "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
     fi
 }
@@ -243,7 +245,8 @@ request_acme_cert() {
     # Check if acme.sh is installed
     if ! command -v acme.sh &>/dev/null; then
         echo "正在安装 acme.sh ..."
-        curl -s https://get.acme.sh | sh -s email=
+        curl -s https://get.acme.sh | sh -s email=test@example.com \
+            || { echo "acme.sh 安装失败"; return 1; }
         export PATH="$HOME/.acme.sh:$PATH"
     fi
 
@@ -372,7 +375,7 @@ wait_service_start() {
             return 0
         fi
         sleep 1
-        (( i++ ))
+        i=$(( i + 1 ))
     done
     return 1
 }

@@ -18,8 +18,9 @@ ensure_default_user() {
 
     init_users
 
-    if jq -e '.users[] | select(.name == "default")' "$USERS_FILE" &>/dev/null; then
-        # Update existing: add protocol, refresh credentials
+    if jq -e --arg name "default" '.users[] | select(.name == $name)' "$USERS_FILE" &>/dev/null; then
+        # User exists: add protocol and update appropriate credentials
+        # (credentials are per-protocol; rebuild below syncs them to inbound.json)
         jq --arg proto "$protocol" \
            --arg uuid "$uuid" \
            --arg password "$password" \
@@ -28,6 +29,8 @@ ensure_default_user() {
                if $uuid != "" then .uuid = $uuid else . end |
                if $password != "" then .password = $password else . end
            )' "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+        # Rebuild to sync updated credentials to inbound.json
+        rebuild_protocol_config "$protocol"
     else
         local now
         now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -93,7 +96,7 @@ add_user() {
     all_protocols=$(echo "$installed_protocols" | tr '\n' ' ')
     local idx=0
     for proto in $all_protocols; do
-        (( idx++ ))
+        idx=$(( idx + 1 ))
         for i in "${indices[@]}"; do
             i=$(echo "$i" | tr -d ' ')
             if [[ "$i" == "$idx" ]]; then

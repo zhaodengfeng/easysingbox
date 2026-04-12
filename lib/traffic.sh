@@ -51,8 +51,8 @@ collect_all_traffic() {
         connections=$(curl -s --max-time 5 "http://127.0.0.1:${api_port}/connections" 2>/dev/null || echo '{}')
 
         if [[ "$connections" != "{}" ]] && [[ -n "$connections" ]]; then
-            total_up=$(echo "$connections" | jq '[.connections[]?.upload // 0] | add // 0' 2>/dev/null || echo 0)
-            total_down=$(echo "$connections" | jq '[.connections[]?.download // 0] | add // 0' 2>/dev/null || echo 0)
+            total_up=$(echo "$connections" | jq '[.connections // [] | .[]? | .upload // 0] | add // 0' 2>/dev/null || echo 0)
+            total_down=$(echo "$connections" | jq '[.connections // [] | .[]? | .download // 0] | add // 0' 2>/dev/null || echo 0)
         fi
 
         # 获取上次快照值
@@ -75,7 +75,7 @@ collect_all_traffic() {
             user_count=$(jq --arg proto "$protocol" \
                 '[.users[] | select(.enabled == true and .blocked_at == null and (.protocols | index($proto)))] | length' \
                 "$USERS_FILE" 2>/dev/null || echo 1)
-            (( user_count == 0 )) && user_count=1
+            (( user_count == 0 )) && user_count=1 || true
 
             local per_user_up=$(( delta_up / user_count ))
             local per_user_down=$(( delta_down / user_count ))
@@ -127,6 +127,7 @@ setup_traffic_cron() {
 */5 * * * * root ${INSTALL_DIR}/easysingbox.sh --collect-traffic
 0 0 * * * root ${INSTALL_DIR}/easysingbox.sh --monthly-reset
 EOF
+    chmod 644 "$cron_file"
 }
 
 # ─── Traffic Limits Check ─────────────────────────────────────────────────
@@ -163,9 +164,11 @@ check_traffic_limits() {
                 "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
 
             # 重建受影响的协议
-            for proto in $(echo "$protos" | tr ',' ' '); do
-                rebuild_protocol_config "$proto"
-            done
+            if [[ -n "$protos" ]]; then
+                for proto in $(echo "$protos" | tr ',' ' '); do
+                    rebuild_protocol_config "$proto"
+                done
+            fi
         fi
     done
 }
@@ -200,9 +203,11 @@ monthly_traffic_reset() {
                 echo "[月度重置] 用户 $username 月度流量已重置，自动解封"
 
                 # 重建协议
-                for proto in $(echo "$protos" | tr ',' ' '); do
-                    rebuild_protocol_config "$proto"
-                done
+                if [[ -n "$protos" ]]; then
+                    for proto in $(echo "$protos" | tr ',' ' '); do
+                        rebuild_protocol_config "$proto"
+                    done
+                fi
             else
                 echo "[月度重置] 用户 $username 月度流量已重置"
             fi
@@ -221,7 +226,6 @@ view_traffic_stats() {
     echo "  2. 累计总流量"
     echo "  3. 历史月份"
     echo "  0. 返回"
-    echo ""
     echo ""
     read -rp "请选择: " choice
 

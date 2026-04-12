@@ -62,8 +62,8 @@ install_singbox() {
 
     # Update state
     if [[ -f "$STATE_FILE" ]]; then
-        jq ".version = \"$clean_version\"" "$STATE_FILE" > "${STATE_FILE}.tmp" && \
-            mv "${STATE_FILE}.tmp" "$STATE_FILE"
+        jq --arg version "$clean_version" '.version = $version' \
+            "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
     else
         local now
         now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -117,7 +117,23 @@ upgrade_singbox() {
     fi
 
     # Install new version (config is preserved)
-    install_singbox "$latest"
+    if ! install_singbox "$latest"; then
+        echo "升级失败，回滚到旧版本 ..."
+        if [[ -f "${INSTALL_DIR}/bin/sing-box.bak" ]]; then
+            mv "${INSTALL_DIR}/bin/sing-box.bak" "${INSTALL_DIR}/bin/sing-box"
+        fi
+        # Restart services with rolled-back binary
+        echo "正在重启所有服务 ..."
+        for protocol in $(jq -r '.protocols | keys[]' "$STATE_FILE" 2>/dev/null); do
+            if [[ -d "${CONFIG_DIR}/${protocol}" ]]; then
+                start_service "$protocol"
+            fi
+        done
+        return 1
+    fi
+
+    # Clean backup
+    rm -f "${INSTALL_DIR}/bin/sing-box.bak"
 
     # Restart all services
     echo "正在重启所有服务 ..."

@@ -28,7 +28,7 @@ generate_share_link() {
         vless-reality)
             local sni pbk sid
             sni=$(jq -r '.inbounds[0].tls.server_name // ""' "${CONFIG_DIR}/${protocol}/inbound.json")
-            pbk=$(jq -r '.protocols["vless-reality"].public_key // ""' "$STATE_FILE")
+            pbk=$(jq -r --arg key "vless-reality" '.protocols[$key].public_key // ""' "$STATE_FILE")
             sid=$(jq -r '.inbounds[0].tls.reality.short_id[0] // ""' "${CONFIG_DIR}/${protocol}/inbound.json")
             link="vless://${uuid}@${server_ip}:${port}?security=reality&flow=xtls-rprx-vision&sni=${sni}&pbk=${pbk}&sid=${sid}#${username}"
             ;;
@@ -124,7 +124,8 @@ view_share_links() {
     user_idx=$(echo "$user_idx" | tr -d ' ')
 
     local username
-    username=$(jq -r ".users[$((user_idx - 1))].name" "$USERS_FILE")
+    username=$(jq -r --argjson idx "$((user_idx - 1))" '.users[$idx].name // empty' "$USERS_FILE")
+    [[ -z "$username" ]] && { echo "无效用户编号"; return; }
 
     echo ""
     echo "用户: $username"

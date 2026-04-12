@@ -154,19 +154,17 @@ install_protocol() {
         hysteria2)     install_hysteria2 ;;
         tuic)          install_tuic ;;
         anytls)        install_anytls ;;
-    esac
-
-    if [[ $? -eq 0 ]]; then
+    esac && {
         echo ""
         echo "协议 $protocol 安装完成！"
-    fi
+    }
 }
 
 # ─── Helpers ─────────────────────────────────────────────────────────────
 
 is_protocol_installed() {
     local protocol="$1"
-    [[ -f "$STATE_FILE" ]] && jq -e ".protocols[\"$protocol\"]" "$STATE_FILE" &>/dev/null
+    [[ -f "$STATE_FILE" ]] && jq -e --arg proto "$protocol" '.protocols | has($proto)' "$STATE_FILE" &>/dev/null
 }
 
 get_server_ip() {
