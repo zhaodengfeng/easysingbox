@@ -11,7 +11,7 @@ prompt_anytls() {
 
     local port
     port=$(prompt_port "443")
-    eval "ANYTLS_PORT=$port"
+    ANYTLS_PORT=$port
 }
 
 install_anytls() {
@@ -65,16 +65,7 @@ install_anytls() {
     wait_service_start "anytls" 10
     set_protocol_state "anytls" "$ANYTLS_PORT" "running" "$ANYTLS_DOMAIN"
 
-    init_users
-    local now
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    jq ".users += [{
-        name: \"default\", uuid: null, password: \"$password\",
-        protocols: [\"anytls\"], enabled: true, created_at: \"$now\",
-        traffic_limit_monthly: 0, traffic_limit_total: 0,
-        traffic_used_monthly: 0, traffic_used_total: 0,
-        monthly_reset_day: 1, blocked_at: null
-    }]" "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+    ensure_default_user "anytls" "" "$password"
 
     generate_share_link "anytls" "default"
     setup_traffic_cron

@@ -212,7 +212,6 @@ if [[ ${#MISSING_REQUIRED[@]} -gt 0 ]]; then
     echo ""
     info "正在安装缺失的必要依赖 ..."
     for cmd in "${MISSING_REQUIRED[@]}"; do
-        pkg
         pkg=$(get_pkg_name "$cmd")
         echo -n "  安装 $pkg ... "
         if install_package "$pkg"; then

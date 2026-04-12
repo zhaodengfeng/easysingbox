@@ -11,7 +11,7 @@ prompt_vmess_ws() {
 
     local port
     port=$(prompt_port "443")
-    eval "VMESS_WS_PORT=$port"
+    VMESS_WS_PORT=$port
 
     read -rp "WebSocket 路径 [默认: /vmess]: " VMESS_WS_PATH
     VMESS_WS_PATH="${VMESS_WS_PATH:-/vmess}"
@@ -73,16 +73,7 @@ install_vmess_ws() {
     wait_service_start "vmess-ws" 10
     set_protocol_state "vmess-ws" "$VMESS_WS_PORT" "running" "$VMESS_WS_DOMAIN"
 
-    init_users
-    local now
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    jq ".users += [{
-        name: \"default\", uuid: \"$uuid\", password: null,
-        protocols: [\"vmess-ws\"], enabled: true, created_at: \"$now\",
-        traffic_limit_monthly: 0, traffic_limit_total: 0,
-        traffic_used_monthly: 0, traffic_used_total: 0,
-        monthly_reset_day: 1, blocked_at: null
-    }]" "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+    ensure_default_user "vmess-ws" "$uuid" ""
 
     generate_share_link "vmess-ws" "default"
     setup_traffic_cron

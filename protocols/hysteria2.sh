@@ -11,7 +11,7 @@ prompt_hysteria2() {
 
     local port
     port=$(prompt_port "443")
-    eval "HY2_PORT=$port"
+    HY2_PORT=$port
 
     # Warn about UDP
     echo ""
@@ -73,16 +73,7 @@ install_hysteria2() {
     wait_service_start "hysteria2" 10
     set_protocol_state "hysteria2" "$HY2_PORT" "running" "$HY2_DOMAIN"
 
-    init_users
-    local now
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    jq ".users += [{
-        name: \"default\", uuid: null, password: \"$password\",
-        protocols: [\"hysteria2\"], enabled: true, created_at: \"$now\",
-        traffic_limit_monthly: 0, traffic_limit_total: 0,
-        traffic_used_monthly: 0, traffic_used_total: 0,
-        monthly_reset_day: 1, blocked_at: null
-    }]" "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+    ensure_default_user "hysteria2" "" "$password"
 
     generate_share_link "hysteria2" "default"
     setup_traffic_cron

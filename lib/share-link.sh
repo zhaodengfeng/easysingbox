@@ -28,7 +28,7 @@ generate_share_link() {
         vless-reality)
             local sni pbk sid
             sni=$(jq -r '.inbounds[0].tls.server_name // ""' "${CONFIG_DIR}/${protocol}/inbound.json")
-            pbk=$(jq -r '.inbounds[0].tls.reality.public_key // ""' "${CONFIG_DIR}/${protocol}/inbound.json")
+            pbk=$(jq -r '.protocols["vless-reality"].public_key // ""' "$STATE_FILE")
             sid=$(jq -r '.inbounds[0].tls.reality.short_id[0] // ""' "${CONFIG_DIR}/${protocol}/inbound.json")
             link="vless://${uuid}@${server_ip}:${port}?security=reality&flow=xtls-rprx-vision&sni=${sni}&pbk=${pbk}&sid=${sid}#${username}"
             ;;
@@ -63,20 +63,20 @@ generate_share_link() {
             link="trojan://${password}@${domain}:${port}?security=tls#${username}"
             ;;
         shadowsocks)
-            local method
+            local method server_pw
             method=$(jq -r '.inbounds[0].method // "2022-blake3-aes-256-gcm"' "${CONFIG_DIR}/${protocol}/inbound.json")
+            server_pw=$(jq -r '.inbounds[0].password // ""' "${CONFIG_DIR}/${protocol}/inbound.json")
             local encoded
-            encoded=$(echo -n "${method}:${password}" | base64 -w0)
+            encoded=$(echo -n "${method}:${server_pw}:${password}" | base64 -w0)
             link="ss://${encoded}@${server_ip}:${port}#${username}"
             ;;
         shadowtls)
             local domain st_pass
             domain=$(jq -r '.inbounds[0].tls.server_name // ""' "${CONFIG_DIR}/${protocol}/inbound.json")
             st_pass=$(jq -r '.inbounds[0].users[0].password // ""' "${CONFIG_DIR}/${protocol}/inbound.json")
-            local ss_method ss_pass
+            local ss_method
             ss_method=$(jq -r '.inbounds[1].method // "2022-blake3-aes-128-gcm"' "${CONFIG_DIR}/${protocol}/inbound.json")
-            ss_pass=$(jq -r '.inbounds[1].password // ""' "${CONFIG_DIR}/${protocol}/inbound.json")
-            link="ss://${ss_method}:${ss_pass}@127.0.0.1:${port}?shadow-tls=${st_pass}&shadow-tls-sni=${domain}#${username}"
+            link="ss://${ss_method}:${password}@${server_ip}:${port}?shadow-tls=${st_pass}&shadow-tls-sni=${domain}#${username}"
             ;;
         hysteria2)
             local domain

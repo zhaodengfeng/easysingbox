@@ -9,6 +9,53 @@ init_users() {
     fi
 }
 
+# ─── Default User Helper ──────────────────────────────────────────────────
+
+ensure_default_user() {
+    local protocol="$1"
+    local uuid="${2:-}"
+    local password="${3:-}"
+
+    init_users
+
+    if jq -e '.users[] | select(.name == "default")' "$USERS_FILE" &>/dev/null; then
+        # Update existing: add protocol, refresh credentials
+        jq --arg proto "$protocol" \
+           --arg uuid "$uuid" \
+           --arg password "$password" \
+           '(.users[] | select(.name == "default")) |= (
+               .protocols = ([.protocols[], $proto] | unique) |
+               if $uuid != "" then .uuid = $uuid else . end |
+               if $password != "" then .password = $password else . end
+           )' "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+    else
+        local now
+        now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        local user_json
+        user_json=$(jq -n \
+            --arg proto "$protocol" \
+            --arg uuid "$uuid" \
+            --arg password "$password" \
+            --arg created_at "$now" \
+            '{
+                name: "default",
+                uuid: (if $uuid == "" then null else $uuid end),
+                password: (if $password == "" then null else $password end),
+                protocols: [$proto],
+                enabled: true,
+                created_at: $created_at,
+                traffic_limit_monthly: 0,
+                traffic_limit_total: 0,
+                traffic_used_monthly: 0,
+                traffic_used_total: 0,
+                monthly_reset_day: 1,
+                blocked_at: null
+            }')
+        jq --argjson user "$user_json" '.users += [$user]' \
+            "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+    fi
+}
+
 # ─── Add User ─────────────────────────────────────────────────────────────
 
 add_user() {
@@ -21,7 +68,7 @@ add_user() {
     done
 
     # Check duplicate
-    if jq -e ".users[] | select(.name == \"$username\")" "$USERS_FILE" &>/dev/null; then
+    if jq -e --arg name "$username" '.users[] | select(.name == $name)' "$USERS_FILE" &>/dev/null; then
         echo "用户 $username 已存在"
         return
     fi
@@ -182,17 +229,17 @@ remove_user() {
 
     # Get protocols before removal
     local protos
-    protos=$(jq -r ".users[] | select(.name == \"$username\") | .protocols[]" "$USERS_FILE")
+    protos=$(jq -r --arg name "$username" '.users[] | select(.name == $name) | .protocols[]' "$USERS_FILE")
 
     # Remove user
-    jq "del(.users[] | select(.name == \"$username\"))" \
+    jq --arg name "$username" 'del(.users[] | select(.name == $name))' \
         "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
 
     # Clean traffic data
     local month
     month=$(date +%Y-%m)
     if [[ -f "${MONTHLY_DIR}/${month}.json" ]]; then
-        jq "del(.users[\"$username\"])" "${MONTHLY_DIR}/${month}.json" > "${MONTHLY_DIR}/${month}.json.tmp" && \
+        jq --arg name "$username" 'del(.users[$name])' "${MONTHLY_DIR}/${month}.json" > "${MONTHLY_DIR}/${month}.json.tmp" && \
             mv "${MONTHLY_DIR}/${month}.json.tmp" "${MONTHLY_DIR}/${month}.json"
     fi
 
@@ -240,12 +287,13 @@ toggle_user() {
         echo "启用用户 $username"
     fi
 
-    jq "(.users[] | select(.name == \"$username\")) .enabled = $new_enabled" \
+    jq --arg name "$username" --argjson enabled "$new_enabled" \
+        '(.users[] | select(.name == $name)).enabled = $enabled' \
         "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
 
     # Rebuild affected protocols
     local protos
-    protos=$(jq -r ".users[] | select(.name == \"$username\") | .protocols[]" "$USERS_FILE")
+    protos=$(jq -r --arg name "$username" '.users[] | select(.name == $name) | .protocols[]' "$USERS_FILE")
     for proto in $protos; do
         rebuild_protocol_config "$proto"
     done
@@ -281,12 +329,13 @@ reset_user_traffic() {
     read -rp "" confirm
     [[ "$confirm" =~ ^[Yy]$ ]] || return
 
-    jq "(.users[] | select(.name == \"$username\")) | .traffic_used_monthly = 0 | .traffic_used_total = 0 | .blocked_at = null" \
+    jq --arg name "$username" \
+        '(.users[] | select(.name == $name)) |= (.traffic_used_monthly = 0 | .traffic_used_total = 0 | .blocked_at = null)' \
         "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
 
     # Rebuild if was blocked
     local protos
-    protos=$(jq -r ".users[] | select(.name == \"$username\") | .protocols[]" "$USERS_FILE")
+    protos=$(jq -r --arg name "$username" '.users[] | select(.name == $name) | .protocols[]' "$USERS_FILE")
     for proto in $protos; do
         rebuild_protocol_config "$proto"
     done
@@ -341,7 +390,8 @@ set_user_traffic_limit() {
         total_limit=0
     fi
 
-    jq "(.users[] | select(.name == \"$username\")) | .traffic_limit_monthly = $monthly_limit | .traffic_limit_total = $total_limit" \
+    jq --arg name "$username" --argjson ml "$monthly_limit" --argjson tl "$total_limit" \
+        '(.users[] | select(.name == $name)) |= (.traffic_limit_monthly = $ml | .traffic_limit_total = $tl)' \
         "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
 
     echo "用户 $username 的流量限额已更新"

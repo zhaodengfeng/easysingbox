@@ -11,7 +11,7 @@ prompt_tuic() {
 
     local port
     port=$(prompt_port "443")
-    eval "TUIC_PORT=$port"
+    TUIC_PORT=$port
 
     echo ""
     echo "注意: TUIC 使用 QUIC (UDP) 协议"
@@ -72,16 +72,7 @@ install_tuic() {
     wait_service_start "tuic" 10
     set_protocol_state "tuic" "$TUIC_PORT" "running" "$TUIC_DOMAIN"
 
-    init_users
-    local now
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    jq ".users += [{
-        name: \"default\", uuid: \"$uuid\", password: \"$password\",
-        protocols: [\"tuic\"], enabled: true, created_at: \"$now\",
-        traffic_limit_monthly: 0, traffic_limit_total: 0,
-        traffic_used_monthly: 0, traffic_used_total: 0,
-        monthly_reset_day: 1, blocked_at: null
-    }]" "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+    ensure_default_user "tuic" "$uuid" "$password"
 
     generate_share_link "tuic" "default"
     setup_traffic_cron

@@ -12,7 +12,7 @@ REALITY_DESTS=(
 prompt_vless_reality() {
     local port
     port=$(prompt_port "8443")
-    eval "VLESS_REALITY_PORT=$port"
+    VLESS_REALITY_PORT=$port
 
     echo ""
     echo "可选 Reality 伪装目标:"
@@ -22,7 +22,7 @@ prompt_vless_reality() {
     echo "  6. 自定义"
     read -rp "选择 [默认: 1]: " dest_idx
     dest_idx="${dest_idx:-1}"
-    if [[ "$dest_idx" -ge 1 ]] && [[ "$dest_idx" -le 5 ]]; then
+    if [[ "$dest_idx" =~ ^[0-9]+$ ]] && (( dest_idx >= 1 && dest_idx <= 5 )); then
         VLESS_REALITY_DEST="${REALITY_DESTS[$((dest_idx - 1))]}"
     else
         read -rp "自定义目标域名: " VLESS_REALITY_DEST
@@ -114,24 +114,12 @@ install_vless_reality() {
     # Update state
     set_protocol_state "vless-reality" "$VLESS_REALITY_PORT" "running"
 
+    # Store public_key in state for share link generation
+    jq --arg pk "$public_key" '.protocols["vless-reality"].public_key = $pk' \
+        "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+
     # Add default user to users.json
-    init_users
-    local now
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    jq ".users += [{
-        name: \"default\",
-        uuid: \"$uuid\",
-        password: null,
-        protocols: [\"vless-reality\"],
-        enabled: true,
-        created_at: \"$now\",
-        traffic_limit_monthly: 0,
-        traffic_limit_total: 0,
-        traffic_used_monthly: 0,
-        traffic_used_total: 0,
-        monthly_reset_day: 1,
-        blocked_at: null
-    }]" "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+    ensure_default_user "vless-reality" "$uuid" ""
 
     # Generate share link
     generate_share_link "vless-reality" "default"

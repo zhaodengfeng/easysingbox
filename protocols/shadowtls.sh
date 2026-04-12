@@ -11,7 +11,7 @@ prompt_shadowtls() {
 
     local port
     port=$(prompt_port "443")
-    eval "SHADOWTLS_PORT=$port"
+    SHADOWTLS_PORT=$port
 }
 
 install_shadowtls() {
@@ -83,16 +83,7 @@ install_shadowtls() {
     wait_service_start "shadowtls" 10
     set_protocol_state "shadowtls" "$SHADOWTLS_PORT" "running" "$SHADOWTLS_DOMAIN"
 
-    init_users
-    local now
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    jq ".users += [{
-        name: \"default\", uuid: null, password: \"$ss_password\",
-        protocols: [\"shadowtls\"], enabled: true, created_at: \"$now\",
-        traffic_limit_monthly: 0, traffic_limit_total: 0,
-        traffic_used_monthly: 0, traffic_used_total: 0,
-        monthly_reset_day: 1, blocked_at: null
-    }]" "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+    ensure_default_user "shadowtls" "" "$ss_password"
 
     generate_share_link "shadowtls" "default"
     setup_traffic_cron

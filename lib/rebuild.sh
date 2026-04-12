@@ -69,9 +69,21 @@ rebuild_protocol_config() {
 
     # Update the inbound.json users field
     local tmp="${config_file}.tmp"
-    jq --argjson users "$users_json" '
-        .inbounds[0].users = $users
-    ' "$config_file" > "$tmp" && mv "$tmp" "$config_file"
+    case "$protocol" in
+        shadowtls)
+            # shadowtls has 2 inbounds: [0]=shadowtls, [1]=shadowsocks
+            # inbound[0] users list is the ST password list (1:1 mapping from SS users)
+            jq --argjson users "$users_json" '
+                .inbounds[0].users = ($users | map({password: .password})) |
+                .inbounds[1].users = $users
+            ' "$config_file" > "$tmp" && mv "$tmp" "$config_file"
+            ;;
+        *)
+            jq --argjson users "$users_json" '
+                .inbounds[0].users = $users
+            ' "$config_file" > "$tmp" && mv "$tmp" "$config_file"
+            ;;
+    esac
 
     echo "[rebuild] 协议 $protocol 配置已重建 ($user_count 个用户)"
 

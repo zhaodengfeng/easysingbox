@@ -11,7 +11,7 @@ prompt_trojan() {
 
     local port
     port=$(prompt_port "443")
-    eval "TROJAN_PORT=$port"
+    TROJAN_PORT=$port
 }
 
 install_trojan() {
@@ -65,16 +65,7 @@ install_trojan() {
     wait_service_start "trojan" 10
     set_protocol_state "trojan" "$TROJAN_PORT" "running" "$TROJAN_DOMAIN"
 
-    init_users
-    local now
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    jq ".users += [{
-        name: \"default\", uuid: null, password: \"$password\",
-        protocols: [\"trojan\"], enabled: true, created_at: \"$now\",
-        traffic_limit_monthly: 0, traffic_limit_total: 0,
-        traffic_used_monthly: 0, traffic_used_total: 0,
-        monthly_reset_day: 1, blocked_at: null
-    }]" "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+    ensure_default_user "trojan" "" "$password"
 
     generate_share_link "trojan" "default"
     setup_traffic_cron

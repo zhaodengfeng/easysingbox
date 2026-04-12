@@ -156,8 +156,10 @@ install_protocol() {
         anytls)        install_anytls ;;
     esac
 
-    echo ""
-    echo "协议 $protocol 安装完成！"
+    if [[ $? -eq 0 ]]; then
+        echo ""
+        echo "协议 $protocol 安装完成！"
+    fi
 }
 
 # ─── Helpers ─────────────────────────────────────────────────────────────
@@ -267,7 +269,7 @@ uninstall_protocol() {
     delete_protocol_state "$protocol"
 
     # Update users - remove protocol from all users
-    jq ".users[].protocols |= map(select(. != \"$protocol\"))" \
+    jq --arg proto "$protocol" '.users[].protocols |= map(select(. != $proto))' \
         "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
 
     echo "协议 $protocol 已卸载"

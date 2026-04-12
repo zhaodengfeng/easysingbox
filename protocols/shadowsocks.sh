@@ -4,7 +4,7 @@
 prompt_shadowsocks() {
     local port
     port=$(prompt_port "8388")
-    eval "SS_PORT=$port"
+    SS_PORT=$port
 
     echo "可选加密方法:"
     echo "  1. 2022-blake3-aes-256-gcm (推荐)"
@@ -68,16 +68,7 @@ install_shadowsocks() {
     wait_service_start "shadowsocks" 10
     set_protocol_state "shadowsocks" "$SS_PORT" "running"
 
-    init_users
-    local now
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    jq ".users += [{
-        name: \"default\", uuid: null, password: \"$user_password\",
-        protocols: [\"shadowsocks\"], enabled: true, created_at: \"$now\",
-        traffic_limit_monthly: 0, traffic_limit_total: 0,
-        traffic_used_monthly: 0, traffic_used_total: 0,
-        monthly_reset_day: 1, blocked_at: null
-    }]" "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+    ensure_default_user "shadowsocks" "" "$user_password"
 
     generate_share_link "shadowsocks" "default"
     setup_traffic_cron

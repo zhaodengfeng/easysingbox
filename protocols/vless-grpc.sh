@@ -11,10 +11,10 @@ prompt_vless_grpc() {
 
     local port
     port=$(prompt_port "443")
-    eval "VLESS_GRPC_PORT=$port"
+    VLESS_GRPC_PORT=$port
 
-    read -rp "gRPC 服务名 [默认: /grpc]: " VLESS_GRPC_SERVICE
-    VLESS_GRPC_SERVICE="${VLESS_GRPC_SERVICE:-/grpc}"
+    read -rp "gRPC 服务名 [默认: grpc]: " VLESS_GRPC_SERVICE
+    VLESS_GRPC_SERVICE="${VLESS_GRPC_SERVICE:-grpc}"
 }
 
 install_vless_grpc() {
@@ -73,16 +73,7 @@ install_vless_grpc() {
     wait_service_start "vless-grpc" 10
     set_protocol_state "vless-grpc" "$VLESS_GRPC_PORT" "running" "$VLESS_GRPC_DOMAIN"
 
-    init_users
-    local now
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    jq ".users += [{
-        name: \"default\", uuid: \"$uuid\", password: null,
-        protocols: [\"vless-grpc\"], enabled: true, created_at: \"$now\",
-        traffic_limit_monthly: 0, traffic_limit_total: 0,
-        traffic_used_monthly: 0, traffic_used_total: 0,
-        monthly_reset_day: 1, blocked_at: null
-    }]" "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+    ensure_default_user "vless-grpc" "$uuid" ""
 
     generate_share_link "vless-grpc" "default"
     setup_traffic_cron

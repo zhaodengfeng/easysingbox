@@ -28,9 +28,10 @@ get_package_manager() {
     local os
     os=$(detect_os)
     case "$os" in
-        ubuntu|debian)  echo "apt" ;;
-        centos|rocky|almalinux|fedora) echo "yum" ;;
-        alpine) echo "apk" ;;
+        ubuntu|debian)              echo "apt" ;;
+        fedora)                     echo "dnf" ;;
+        centos|rocky|almalinux)     echo "yum" ;;
+        alpine)                     echo "apk" ;;
         *) echo "unknown" ;;
     esac
 }
@@ -91,15 +92,15 @@ prompt_port() {
     while true; do
         read -rp "请输入端口 [默认: ${default_port}]: " port
         port="${port:-$default_port}"
-        if [[ "$port" =~ ^[0-9]+$ ]] && (( port > 0 && port < 65536 )); then
+        if [[ "$port" =~ ^[0-9]+$ ]] && (( port > 0 && port <= 65535 )); then
             if check_port_available "$port"; then
                 echo "$port"
                 return
             else
-                echo "端口 $port 已被占用，请更换"
+                echo "端口 $port 已被占用，请更换" >&2
             fi
         else
-            echo "无效的端口号"
+            echo "无效的端口号" >&2
         fi
     done
 }
@@ -137,16 +138,11 @@ save_state() {
     jq '.' "$STATE_FILE" > "$tmp" 2>/dev/null && mv "$tmp" "$STATE_FILE"
 }
 
-load_state() {
-    if [[ ! -f "$STATE_FILE" ]]; then
-        init_state
-    fi
-    cat "$STATE_FILE"
-}
-
 get_protocol_port() {
     local protocol="$1"
-    load_state | jq -r ".protocols[\"$protocol\"].port // empty"
+    if [[ -f "$STATE_FILE" ]]; then
+        jq -r ".protocols[\"$protocol\"].port // empty" "$STATE_FILE"
+    fi
 }
 
 set_protocol_state() {
@@ -161,11 +157,14 @@ set_protocol_state() {
         init_state
     fi
 
+    # Merge update — preserve existing fields (e.g. public_key)
     if [[ -n "$domain" ]]; then
-        jq ".protocols[\"$protocol\"] = {\"port\": $port, \"status\": \"$status\", \"domain\": \"$domain\", \"created_at\": \"$now\"}" \
+        jq --arg proto "$protocol" --argjson port "$port" --arg status "$status" --arg domain "$domain" --arg now "$now" \
+            '.protocols[$proto] = (.protocols[$proto] // {} | . + {"port": $port, "status": $status, "domain": $domain, "created_at": $now})' \
             "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
     else
-        jq ".protocols[\"$protocol\"] = {\"port\": $port, \"status\": \"$status\", \"created_at\": \"$now\"}" \
+        jq --arg proto "$protocol" --argjson port "$port" --arg status "$status" --arg now "$now" \
+            '.protocols[$proto] = (.protocols[$proto] // {} | . + {"port": $port, "status": $status, "created_at": $now})' \
             "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
     fi
 }
@@ -254,13 +253,12 @@ request_acme_cert() {
     done
 
     echo "正在为 $domain 申请证书 ..."
-    acme.sh --issue --standalone -d "$domain" --server letsencrypt \
+    if acme.sh --issue --standalone -d "$domain" --server letsencrypt \
         --register-account -m "$email" \
         --keylength ec-256 \
         --key-file "${TLS_DIR}/${domain}.key" \
-        --fullchain-file "${TLS_DIR}/${domain}.crt" 2>&1
-
-    if [[ $? -eq 0 ]] && [[ -f "${TLS_DIR}/${domain}.crt" ]]; then
+        --fullchain-file "${TLS_DIR}/${domain}.crt" 2>&1 && \
+       [[ -f "${TLS_DIR}/${domain}.crt" ]]; then
         echo "证书申请成功"
         return 0
     else
@@ -335,9 +333,6 @@ WantedBy=multi-user.target
 EOF
 
     # Symlink to systemd
-    if [[ -f "/etc/systemd/system/${service_name}.service" ]]; then
-        rm -f "/etc/systemd/system/${service_name}.service"
-    fi
     ln -sf "$service_file" "/etc/systemd/system/${service_name}.service"
     systemctl daemon-reload
 }

@@ -149,6 +149,7 @@ ensure_singbox_installed() {
             case "$pkg_mgr" in
                 apt)  apt-get update -qq && apt-get install -y -qq "$cmd" ;;
                 yum)  yum install -y -q "$cmd" ;;
+                dnf)  dnf install -y -q "$cmd" ;;
                 apk)  apk add --quiet "$cmd" ;;
                 *)    echo "无法安装 $cmd，请手动安装"; exit 1 ;;
             esac
@@ -162,6 +163,7 @@ ensure_singbox_installed() {
         case "$pkg_mgr" in
             apt)  apt-get install -y -qq qrencode 2>/dev/null || true ;;
             yum)  yum install -y -q qrencode 2>/dev/null || true ;;
+            dnf)  dnf install -y -q qrencode 2>/dev/null || true ;;
             apk)  apk add --quiet qrencode 2>/dev/null || true ;;
         esac
     fi

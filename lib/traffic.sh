@@ -60,10 +60,12 @@ collect_all_traffic() {
         last_up=$(jq -r ".traffic_snapshot[\"$protocol\"].total_up // 0" "$STATE_FILE" 2>/dev/null || echo 0)
         last_down=$(jq -r ".traffic_snapshot[\"$protocol\"].total_down // 0" "$STATE_FILE" 2>/dev/null || echo 0)
 
-        # 计算 delta（处理计数器重置）
+        # 计算 delta（分别处理，服务重启可能导致单项计数器重置）
         local delta_up=0 delta_down=0
-        if (( total_up >= last_up && total_down >= last_down )); then
+        if (( total_up >= last_up )); then
             delta_up=$(( total_up - last_up ))
+        fi
+        if (( total_down >= last_down )); then
             delta_down=$(( total_down - last_down ))
         fi
 
@@ -79,35 +81,31 @@ collect_all_traffic() {
             local per_user_down=$(( delta_down / user_count ))
             local per_user_total=$(( per_user_up + per_user_down ))
 
-            # 批量更新：一次性构建所有用户的更新
+            # 获取活跃用户名列表 (JSON array)
             local users_on_proto
             users_on_proto=$(jq -r --arg proto "$protocol" \
                 '[.users[] | select(.enabled == true and .blocked_at == null and (.protocols | index($proto))) | .name]' \
                 "$USERS_FILE" 2>/dev/null)
 
             if [[ -n "$users_on_proto" ]] && [[ "$users_on_proto" != "[]" ]] && [[ "$users_on_proto" != "null" ]]; then
-                # 更新 monthly JSON — 批量操作
-                local monthly_updates=""
-                for username in $(echo "$users_on_proto" | jq -r '.[]'); do
-                    local existing_up=0 existing_down=0
-                    existing_up=$(jq -r ".users[\"$username\"].up // 0" "${MONTHLY_DIR}/${month}.json" 2>/dev/null || echo 0)
-                    existing_down=$(jq -r ".users[\"$username\"].down // 0" "${MONTHLY_DIR}/${month}.json" 2>/dev/null || echo 0)
+                # 更新 monthly JSON — 单次 jq 调用
+                jq --argjson per_up "$per_user_up" --argjson per_down "$per_user_down" --argjson names "$users_on_proto" '
+                    reduce $names[] as $name (.; .users[$name].up = ((.users[$name].up // 0) + $per_up) | .users[$name].down = ((.users[$name].down // 0) + $per_down))
+                ' "${MONTHLY_DIR}/${month}.json" > "${MONTHLY_DIR}/${month}.json.tmp" && \
+                    mv "${MONTHLY_DIR}/${month}.json.tmp" "${MONTHLY_DIR}/${month}.json"
 
-                    monthly_updates="${monthly_updates}.users[\"$username\"] = {\"up\": $((existing_up + per_user_up)), \"down\": $((existing_down + per_user_down))} | "
-                done
+                # 更新 total.json — 单次 jq 调用
+                jq --argjson per_up "$per_user_up" --argjson per_down "$per_user_down" --argjson names "$users_on_proto" '
+                    reduce $names[] as $name (.; .[$name].up = ((.[$name].up // 0) + $per_up) | .[$name].down = ((.[$name].down // 0) + $per_down))
+                ' "$TOTAL_FILE" > "${TOTAL_FILE}.tmp" && mv "${TOTAL_FILE}.tmp" "$TOTAL_FILE"
 
-                if [[ -n "$monthly_updates" ]]; then
-                    # Remove trailing " | "
-                    monthly_updates="${monthly_updates% | }"
-                    jq "$monthly_updates" "${MONTHLY_DIR}/${month}.json" > "${MONTHLY_DIR}/${month}.json.tmp" && \
-                        mv "${MONTHLY_DIR}/${month}.json.tmp" "${MONTHLY_DIR}/${month}.json"
-                fi
-
-                # 更新 users.json — 逐个更新
-                for username in $(echo "$users_on_proto" | jq -r '.[]'); do
-                    jq "(.users[] | select(.name == \"$username\")) | .traffic_used_monthly += $per_user_total | .traffic_used_total += $per_user_total" \
-                        "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
-                done
+                # 更新 users.json — 单次 jq 调用批量更新
+                jq --arg proto "$protocol" --argjson delta "$per_user_total" '
+                    (.users[] | select(.enabled == true and .blocked_at == null and (.protocols | index($proto)))) |= (
+                        .traffic_used_monthly += $delta |
+                        .traffic_used_total += $delta
+                    )
+                ' "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
             fi
 
             # 更新快照
@@ -122,13 +120,13 @@ collect_all_traffic() {
 # ─── Cron Setup ───────────────────────────────────────────────────────────
 
 setup_traffic_cron() {
-    local cron_entry="*/5 * * * * root ${INSTALL_DIR}/easysingbox.sh --collect-traffic"
     local cron_file="/etc/cron.d/easy-singbox-traffic"
 
-    if [[ ! -f "$cron_file" ]]; then
-        echo "$cron_entry" > "$cron_file"
-        echo "流量采集 cron 已设置 (每5分钟)"
-    fi
+    # Always rewrite to ensure correctness (idempotent)
+    cat > "$cron_file" <<EOF
+*/5 * * * * root ${INSTALL_DIR}/easysingbox.sh --collect-traffic
+0 0 * * * root ${INSTALL_DIR}/easysingbox.sh --monthly-reset
+EOF
 }
 
 # ─── Traffic Limits Check ─────────────────────────────────────────────────
@@ -160,7 +158,8 @@ check_traffic_limits() {
         if $blocked; then
             local now
             now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-            jq "(.users[] | select(.name == \"$username\")) .blocked_at = \"$now\"" \
+            jq --arg name "$username" --arg now "$now" \
+                '(.users[] | select(.name == $name)).blocked_at = $now' \
                 "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
 
             # 重建受影响的协议
@@ -189,12 +188,14 @@ monthly_traffic_reset() {
     echo "$user_data" | while IFS='|' read -r username reset_day last_reset was_blocked protos; do
         if [[ "$day" == "$reset_day" ]] && [[ "$last_reset" != "$month" ]]; then
             # 重置月度用量
-            jq "(.users[] | select(.name == \"$username\")) | .traffic_used_monthly = 0 | .last_monthly_reset = \"$month\"" \
+            jq --arg name "$username" --arg month "$month" \
+                '(.users[] | select(.name == $name)) |= (.traffic_used_monthly = 0 | .last_monthly_reset = $month)' \
                 "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
 
             # 如果被封禁，自动解封
             if [[ -n "$was_blocked" ]] && [[ "$was_blocked" != "null" ]]; then
-                jq "(.users[] | select(.name == \"$username\")) .blocked_at = null" \
+                jq --arg name "$username" \
+                    '(.users[] | select(.name == $name)).blocked_at = null' \
                     "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
                 echo "[月度重置] 用户 $username 月度流量已重置，自动解封"
 
