@@ -257,17 +257,26 @@ request_acme_cert() {
     fi
 
     echo "正在为 $domain 申请证书 ..."
-    if acme.sh --issue --standalone -d "$domain" --server letsencrypt \
+    local acme_output
+    acme_output=$(acme.sh --issue --standalone -d "$domain" --server letsencrypt \
         --register-account -m "$email" \
+        --listen-v4 \
         --keylength ec-256 \
         --key-file "${TLS_DIR}/${domain}.key" \
-        --fullchain-file "${TLS_DIR}/${domain}.crt" 2>&1 && \
-       [[ -f "${TLS_DIR}/${domain}.crt" ]]; then
+        --fullchain-file "${TLS_DIR}/${domain}.crt" 2>&1) || true
+
+    if [[ -f "${TLS_DIR}/${domain}.crt" ]]; then
         echo "证书申请成功"
         return 0
     else
-        echo "证书申请失败，80 端口可能被防火墙拦截"
-        echo "提示: 可尝试 DNS challenge 模式: acme.sh --issue --dns -d $domain"
+        echo "$acme_output"
+        echo ""
+        echo "证书申请失败，可能原因:"
+        echo "  1. 80 端口被云服务器安全组拦截"
+        echo "  2. 域名未正确解析到本服务器"
+        echo "  3. 域名通过 CDN（如 Cloudflare）代理，需关闭代理"
+        echo ""
+        echo "如已有证书，可重新运行并选择「使用已有证书」"
         return 1
     fi
 }
