@@ -256,29 +256,36 @@ request_acme_cert() {
         done
     fi
 
+    # Update account email
+    acme.sh --update-account -m "$email" 2>/dev/null || true
+
     echo "正在为 $domain 申请证书 ..."
     local acme_output
     acme_output=$(acme.sh --issue --standalone -d "$domain" --server letsencrypt \
-        --register-account -m "$email" \
+        --force \
         --listen-v4 \
-        --keylength ec-256 \
-        --key-file "${TLS_DIR}/${domain}.key" \
-        --fullchain-file "${TLS_DIR}/${domain}.crt" 2>&1) || true
+        --keylength ec-256 2>&1) || true
 
-    if [[ -f "${TLS_DIR}/${domain}.crt" ]]; then
-        echo "证书申请成功"
-        return 0
-    else
-        echo "$acme_output"
-        echo ""
-        echo "证书申请失败，可能原因:"
-        echo "  1. 80 端口被云服务器安全组拦截"
-        echo "  2. 域名未正确解析到本服务器"
-        echo "  3. 域名通过 CDN（如 Cloudflare）代理，需关闭代理"
-        echo ""
-        echo "如已有证书，可重新运行并选择「使用已有证书」"
-        return 1
+    if [[ -f "${HOME}/.acme.sh/${domain}_ecc/fullchain.cer" ]]; then
+        mkdir -p "$TLS_DIR"
+        acme.sh --install-cert -d "$domain" --ecc \
+            --key-file "${TLS_DIR}/${domain}.key" \
+            --fullchain-file "${TLS_DIR}/${domain}.crt" 2>&1 || true
+        if [[ -f "${TLS_DIR}/${domain}.crt" ]]; then
+            echo "证书申请成功"
+            return 0
+        fi
     fi
+
+    echo "$acme_output"
+    echo ""
+    echo "证书申请失败，可能原因:"
+    echo "  1. 80 端口被云服务器安全组拦截"
+    echo "  2. 域名未正确解析到本服务器"
+    echo "  3. 域名通过 CDN（如 Cloudflare）代理，需关闭代理"
+    echo ""
+    echo "如已有证书，可重新运行并选择「使用已有证书」"
+    return 1
 }
 
 use_existing_certificate() {
