@@ -1,0 +1,408 @@
+#!/usr/bin/env bash
+# lib/common.sh — 公共函数库
+
+# ─── System Detection ────────────────────────────────────────────────────
+
+detect_arch() {
+    local arch
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  echo "amd64" ;;
+        aarch64) echo "arm64" ;;
+        *) echo "不支持的架构: $arch"; exit 1 ;;
+    esac
+}
+
+detect_os() {
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        echo "$ID"
+    elif [[ -f /etc/redhat-release ]]; then
+        echo "centos"
+    else
+        echo "unknown"
+    fi
+}
+
+get_package_manager() {
+    local os
+    os=$(detect_os)
+    case "$os" in
+        ubuntu|debian)  echo "apt" ;;
+        centos|rocky|almalinux|fedora) echo "yum" ;;
+        alpine) echo "apk" ;;
+        *) echo "unknown" ;;
+    esac
+}
+
+# ─── Utilities ────────────────────────────────────────────────────────────
+
+gen_uuid() {
+    if command -v uuidgen &>/dev/null; then
+        uuidgen | tr '[:upper:]' '[:lower:]'
+    else
+        cat /proc/sys/kernel/random/uuid 2>/dev/null || \
+        openssl rand -hex 16 | sed 's/\([a-f0-9]\{8\}\)\([a-f0-9]\{4\}\)\([a-f0-9]\{4\}\)\([a-f0-9]\{4\}\)\([a-f0-9]\{12\}\)/\1-\2-\3-\4-\5/'
+    fi
+}
+
+gen_password() {
+    local len=${1:-16}
+    openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c "$len"
+}
+
+gen_port() {
+    local min=${1:-10000}
+    local max=${2:-65535}
+    local i=0
+    while (( i < 1000 )); do
+        local port=$(( RANDOM % (max - min + 1) + min ))
+        if ! ss -tlnp 2>/dev/null | grep -q ":${port} " && \
+           ! ss -ulnp 2>/dev/null | grep -q ":${port} "; then
+            echo "$port"
+            return
+        fi
+        (( i++ ))
+    done
+    echo ""
+    return 1
+}
+
+validate_domain() {
+    local domain="$1"
+    if [[ "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9._-]{0,253}[a-zA-Z0-9])?$ ]]; then
+        return 0
+    fi
+    return 1
+}
+
+check_port_available() {
+    local port="$1"
+    if ss -tlnp 2>/dev/null | grep -q ":${port} " || \
+       ss -ulnp 2>/dev/null | grep -q ":${port} "; then
+        return 1
+    fi
+    return 0
+}
+
+prompt_port() {
+    local default_port="$1"
+    local port
+    while true; do
+        read -rp "请输入端口 [默认: ${default_port}]: " port
+        port="${port:-$default_port}"
+        if [[ "$port" =~ ^[0-9]+$ ]] && (( port > 0 && port < 65536 )); then
+            if check_port_available "$port"; then
+                echo "$port"
+                return
+            else
+                echo "端口 $port 已被占用，请更换"
+            fi
+        else
+            echo "无效的端口号"
+        fi
+    done
+}
+
+validate_ip() {
+    local ip="$1"
+    [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]
+}
+
+validate_email() {
+    local email="$1"
+    [[ "$email" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]
+}
+
+# ─── Atomic Write ─────────────────────────────────────────────────────────
+
+atomic_write() {
+    local file="$1"
+    local content="$2"
+    local tmp="${file}.tmp"
+    echo "$content" > "$tmp"
+    mv "$tmp" "$file"
+}
+
+# ─── State Management ─────────────────────────────────────────────────────
+
+init_state() {
+    if [[ ! -f "$STATE_FILE" ]]; then
+        atomic_write "$STATE_FILE" '{"version":"","installed_at":"","protocols":{},"traffic_snapshot":{}}'
+    fi
+}
+
+save_state() {
+    local tmp="${STATE_FILE}.tmp"
+    jq '.' "$STATE_FILE" > "$tmp" 2>/dev/null && mv "$tmp" "$STATE_FILE"
+}
+
+load_state() {
+    if [[ ! -f "$STATE_FILE" ]]; then
+        init_state
+    fi
+    cat "$STATE_FILE"
+}
+
+get_protocol_port() {
+    local protocol="$1"
+    load_state | jq -r ".protocols[\"$protocol\"].port // empty"
+}
+
+set_protocol_state() {
+    local protocol="$1"
+    local port="$2"
+    local status="${3:-running}"
+    local domain="${4:-}"
+    local now
+    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    if [[ ! -f "$STATE_FILE" ]]; then
+        init_state
+    fi
+
+    if [[ -n "$domain" ]]; then
+        jq ".protocols[\"$protocol\"] = {\"port\": $port, \"status\": \"$status\", \"domain\": \"$domain\", \"created_at\": \"$now\"}" \
+            "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+    else
+        jq ".protocols[\"$protocol\"] = {\"port\": $port, \"status\": \"$status\", \"created_at\": \"$now\"}" \
+            "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+    fi
+}
+
+update_protocol_status() {
+    local protocol="$1"
+    local status="$2"
+    if [[ -f "$STATE_FILE" ]]; then
+        jq ".protocols[\"$protocol\"].status = \"$status\"" \
+            "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+    fi
+}
+
+delete_protocol_state() {
+    local protocol="$1"
+    if [[ -f "$STATE_FILE" ]]; then
+        jq "del(.protocols[\"$protocol\"]) | del(.traffic_snapshot[\"$protocol\"])" \
+            "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+    fi
+}
+
+# ─── Certificate Management ──────────────────────────────────────────────
+
+check_certificate_status() {
+    local domain="$1"
+    local cert_path="${TLS_DIR}/${domain}.crt"
+
+    if [[ ! -f "$cert_path" ]]; then
+        echo "not_found"
+        return
+    fi
+
+    if ! openssl x509 -in "$cert_path" -noout 2>/dev/null; then
+        echo "invalid"
+        return
+    fi
+
+    local expiry
+    expiry=$(openssl x509 -in "$cert_path" -noout -enddate 2>/dev/null | cut -d= -f2)
+    if [[ -z "$expiry" ]]; then
+        echo "invalid"
+        return
+    fi
+
+    local expiry_epoch
+    expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %T %Y %Z" "$expiry" +%s 2>/dev/null)
+    local now_epoch
+    now_epoch=$(date +%s)
+    local days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
+
+    if (( days_left < 0 )); then
+        echo "expired"
+        return
+    fi
+
+    if (( days_left < 15 )); then
+        echo "expiring"
+        return
+    fi
+
+    # Check domain match
+    local cert_cn
+    cert_cn=$(openssl x509 -in "$cert_path" -noout -subject 2>/dev/null | sed -n 's/.*CN\s*=\s*//p' | sed 's/\s*\/.*//')
+    if [[ -n "$cert_cn" ]] && [[ "$cert_cn" != *"$domain"* ]]; then
+        echo "mismatch"
+        return
+    fi
+
+    echo "valid"
+}
+
+request_acme_cert() {
+    local domain="$1"
+    local email
+
+    # Check if acme.sh is installed
+    if ! command -v acme.sh &>/dev/null; then
+        echo "正在安装 acme.sh ..."
+        curl -s https://get.acme.sh | sh -s email=
+        export PATH="$HOME/.acme.sh:$PATH"
+    fi
+
+    read -rp "请输入用于申请证书的邮箱地址: " email
+    while ! validate_email "$email"; do
+        read -rp "邮箱格式无效，请重新输入: " email
+    done
+
+    echo "正在为 $domain 申请证书 ..."
+    acme.sh --issue --standalone -d "$domain" --server letsencrypt \
+        --register-account -m "$email" \
+        --keylength ec-256 \
+        --key-file "${TLS_DIR}/${domain}.key" \
+        --fullchain-file "${TLS_DIR}/${domain}.crt" 2>&1
+
+    if [[ $? -eq 0 ]] && [[ -f "${TLS_DIR}/${domain}.crt" ]]; then
+        echo "证书申请成功"
+        return 0
+    else
+        echo "证书申请失败，80 端口可能被防火墙拦截"
+        echo "提示: 可尝试 DNS challenge 模式: acme.sh --issue --dns -d $domain"
+        return 1
+    fi
+}
+
+ensure_certificate() {
+    local domain="$1"
+
+    # Try to reuse existing cert
+    local status
+    status=$(check_certificate_status "$domain")
+
+    case "$status" in
+        valid)
+            echo "证书已存在且有效"
+            return 0
+            ;;
+        expiring|expired|mismatch)
+            echo "证书状态: $status，正在续签 ..."
+            if ! request_acme_cert "$domain"; then
+                echo "续签失败"
+                return 1
+            fi
+            return 0
+            ;;
+        not_found|invalid)
+            if [[ "$status" == "invalid" ]]; then
+                echo "证书无效，正在重新申请 ..."
+            else
+                echo "未找到证书，正在申请 ..."
+            fi
+            if ! request_acme_cert "$domain"; then
+                echo "申请失败"
+                return 1
+            fi
+            return 0
+            ;;
+    esac
+}
+
+# ─── Service Management ───────────────────────────────────────────────────
+
+get_service_name() {
+    local protocol="$1"
+    echo "singbox-${protocol}"
+}
+
+write_service() {
+    local protocol="$1"
+    local service_name
+    service_name=$(get_service_name "$protocol")
+    local service_file="${SERVICE_DIR}/${service_name}.service"
+
+    cat > "$service_file" <<EOF
+[Unit]
+Description=easy-sing-box - ${protocol}
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${INSTALL_DIR}/bin/sing-box run -c ${CONFIG_DIR}/${protocol}/inbound.json
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Symlink to systemd
+    if [[ -f "/etc/systemd/system/${service_name}.service" ]]; then
+        rm -f "/etc/systemd/system/${service_name}.service"
+    fi
+    ln -sf "$service_file" "/etc/systemd/system/${service_name}.service"
+    systemctl daemon-reload
+}
+
+start_service() {
+    local protocol="$1"
+    local service_name
+    service_name=$(get_service_name "$protocol")
+    systemctl enable "$service_name" &>/dev/null || true
+    systemctl start "$service_name"
+    update_protocol_status "$protocol" "running"
+}
+
+stop_service() {
+    local protocol="$1"
+    local service_name
+    service_name=$(get_service_name "$protocol")
+    systemctl stop "$service_name" 2>/dev/null || true
+    systemctl disable "$service_name" 2>/dev/null || true
+    update_protocol_status "$protocol" "stopped"
+}
+
+restart_service() {
+    local protocol="$1"
+    local service_name
+    service_name=$(get_service_name "$protocol")
+    systemctl restart "$service_name"
+    update_protocol_status "$protocol" "running"
+}
+
+wait_service_start() {
+    local protocol="$1"
+    local max_wait=${2:-10}
+    local i=0
+    while (( i < max_wait )); do
+        if systemctl is-active --quiet "$(get_service_name "$protocol")"; then
+            return 0
+        fi
+        sleep 1
+        (( i++ ))
+    done
+    return 1
+}
+
+check_service_status() {
+    local protocol="$1"
+    local service_name
+    service_name=$(get_service_name "$protocol")
+    systemctl is-active "$service_name" 2>/dev/null || echo "inactive"
+}
+
+# ─── Protocol config dispatcher ──────────────────────────────────────────
+
+prompt_protocol_config() {
+    local protocol="$1"
+    case "$protocol" in
+        vless-reality) prompt_vless_reality ;;
+        vless-ws)      prompt_vless_ws ;;
+        vless-grpc)    prompt_vless_grpc ;;
+        vmess-ws)      prompt_vmess_ws ;;
+        trojan)        prompt_trojan ;;
+        shadowsocks)   prompt_shadowsocks ;;
+        shadowtls)     prompt_shadowtls ;;
+        hysteria2)     prompt_hysteria2 ;;
+        tuic)          prompt_tuic ;;
+        anytls)        prompt_anytls ;;
+    esac
+}

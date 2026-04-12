@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# lib/rebuild.sh — 用户变更后重建协议配置
+
+# Rebuild a protocol's inbound.json based on current users
+rebuild_protocol_config() {
+    local protocol="$1"
+    local config_file="${CONFIG_DIR}/${protocol}/inbound.json"
+
+    [[ -f "$config_file" ]] || return 0
+    [[ -f "$USERS_FILE" ]] || return 0
+
+    # Get active users for this protocol
+    local active_users
+    active_users=$(jq --arg proto "$protocol" \
+        '[.users[] | select(.enabled == true and .blocked_at == null and (.protocols | index($proto)))]' "$USERS_FILE")
+
+    local user_count
+    user_count=$(echo "$active_users" | jq 'length')
+
+    if (( user_count == 0 )); then
+        echo "[rebuild] 协议 $protocol 无活跃用户，跳过重建"
+        return 0
+    fi
+
+    # Build users array based on protocol type
+    local users_json="[]"
+    case "$protocol" in
+        vless-reality|vless-ws|vless-grpc)
+            local flow="xtls-rprx-vision"
+            [[ "$protocol" == *"ws"* ]] && flow=""
+            [[ "$protocol" == *"grpc"* ]] && flow=""
+            if [[ -n "$flow" ]]; then
+                users_json=$(echo "$active_users" | jq --arg flow "$flow" \
+                    '[.[] | select(.uuid != null) | {uuid: .uuid, flow: $flow}]')
+            else
+                users_json=$(echo "$active_users" | jq \
+                    '[.[] | select(.uuid != null) | {uuid: .uuid}]')
+            fi
+            ;;
+        vmess-ws)
+            users_json=$(echo "$active_users" | jq \
+                '[.[] | select(.uuid != null) | {uuid: .uuid, alterId: 0}]')
+            ;;
+        trojan)
+            users_json=$(echo "$active_users" | jq \
+                '[.[] | select(.password != null) | {password: .password}]')
+            ;;
+        shadowsocks)
+            users_json=$(echo "$active_users" | jq \
+                '[.[] | select(.password != null) | {name: .name, password: .password}]')
+            ;;
+        shadowtls)
+            users_json=$(echo "$active_users" | jq \
+                '[.[] | select(.password != null) | {password: .password}]')
+            ;;
+        hysteria2)
+            users_json=$(echo "$active_users" | jq \
+                '[.[] | select(.password != null) | {name: .name, password: .password}]')
+            ;;
+        tuic)
+            users_json=$(echo "$active_users" | jq \
+                '[.[] | select(.uuid != null and .password != null) | {uuid: .uuid, password: .password}]')
+            ;;
+        anytls)
+            users_json=$(echo "$active_users" | jq \
+                '[.[] | select(.password != null) | {password: .password}]')
+            ;;
+    esac
+
+    # Update the inbound.json users field
+    local tmp="${config_file}.tmp"
+    jq --argjson users "$users_json" '
+        .inbounds[0].users = $users
+    ' "$config_file" > "$tmp" && mv "$tmp" "$config_file"
+
+    echo "[rebuild] 协议 $protocol 配置已重建 ($user_count 个用户)"
+
+    # Restart service
+    if is_protocol_installed "$protocol"; then
+        restart_service "$protocol"
+        wait_service_start "$protocol" 10 || echo "[rebuild] 警告: 服务 $protocol 重启后未正常启动"
+    fi
+}
