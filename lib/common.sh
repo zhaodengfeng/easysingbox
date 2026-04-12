@@ -272,19 +272,54 @@ request_acme_cert() {
     fi
 }
 
+use_existing_certificate() {
+    local domain="$1"
+    local cert_path key_path
+
+    echo ""
+    echo "是否使用已有的证书文件？（跳过自动申请）"
+    echo "  适用场景：其他服务已为该域名申请证书"
+    echo ""
+    read -rp "使用已有证书？[y/N]: " use_existing
+    if [[ "$use_existing" =~ ^[Yy]$ ]]; then
+        read -rp "证书文件路径 (.crt/.pem): " cert_path
+        if [[ ! -f "$cert_path" ]]; then
+            echo "证书文件不存在: $cert_path"
+            return 1
+        fi
+        read -rp "私钥文件路径 (.key): " key_path
+        if [[ ! -f "$key_path" ]]; then
+            echo "私钥文件不存在: $key_path"
+            return 1
+        fi
+        mkdir -p "$TLS_DIR"
+        cp "$cert_path" "${TLS_DIR}/${domain}.crt"
+        cp "$key_path" "${TLS_DIR}/${domain}.key"
+        echo "证书已复制到 ${TLS_DIR}/${domain}.{crt,key}"
+        return 0
+    fi
+    return 1
+}
+
 ensure_certificate() {
     local domain="$1"
     local email="${2:-}"
 
-    # Try to reuse existing cert
+    # Check if already exists in our tls dir
     local status
     status=$(check_certificate_status "$domain")
 
+    if [[ "$status" == "valid" ]]; then
+        echo "证书已存在且有效"
+        return 0
+    fi
+
+    # Ask if user wants to use existing certificate from another service
+    if use_existing_certificate "$domain"; then
+        return 0
+    fi
+
     case "$status" in
-        valid)
-            echo "证书已存在且有效"
-            return 0
-            ;;
         expiring|expired|mismatch)
             echo "证书状态: $status，正在续签 ..."
             if ! request_acme_cert "$domain" "$email"; then
