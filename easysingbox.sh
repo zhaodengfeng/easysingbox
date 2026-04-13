@@ -58,14 +58,18 @@ main() {
 
     while true; do
         print_main_menu
-        read -rp "请选择 [0-4]: " choice
+        read -rp "请选择 [0-4/u]: " choice
         echo ""
+
+        # 快捷字母处理
+        choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
 
         case "$choice" in
             1) menu_protocol_management ;;
             2) menu_user_management ;;
             3) menu_service_management ;;
             4) menu_traffic_management ;;
+            u) update_self ;;
             0) echo "Bye!"; exit 0 ;;
             *)  echo "无效选项" ;;
         esac
@@ -84,6 +88,7 @@ print_main_menu() {
     echo "│  【2】用户管理                      │"
     echo "│  【3】服务管理                      │"
     echo "│  【4】流量统计                      │"
+    echo "│  【u】更新脚本                      │"
     echo "│  【0】退出                          │"
     echo "└─────────────────────────────────────┘"
     echo ""
@@ -288,6 +293,72 @@ menu_traffic_management() {
         echo ""
         read -rp "按回车键继续..."
     done
+}
+
+# ─── Update Self ────────────────────────────────────────────────────────
+
+update_self() {
+    local REPO_URL="https://raw.githubusercontent.com/zhaodengfeng/easysingbox/main"
+    local updated=0
+    local failed=0
+
+    echo "正在检查更新 ..."
+    echo ""
+
+    # 备份当前文件
+    echo "备份当前文件 ..."
+    mkdir -p "${INSTALL_DIR}/.backup"
+    local backup_time=$(date +%Y%m%d_%H%M%S)
+
+    cp "${INSTALL_DIR}/easysingbox.sh" "${INSTALL_DIR}/.backup/easysingbox.sh.${backup_time}" 2>/dev/null || true
+
+    # 定义要更新的文件列表
+    declare -a FILES=(
+        "easysingbox.sh:easysingbox.sh"
+        "lib/common.sh:lib/common.sh"
+        "lib/install.sh:lib/install.sh"
+        "lib/users.sh:lib/users.sh"
+        "lib/traffic.sh:lib/traffic.sh"
+        "lib/rebuild.sh:lib/rebuild.sh"
+        "lib/share-link.sh:lib/share-link.sh"
+        "protocols/vless-reality.sh:protocols/vless-reality.sh"
+        "protocols/vless-ws.sh:protocols/vless-ws.sh"
+        "protocols/vless-grpc.sh:protocols/vless-grpc.sh"
+        "protocols/vmess-ws.sh:protocols/vmess-ws.sh"
+        "protocols/trojan.sh:protocols/trojan.sh"
+        "protocols/shadowsocks.sh:protocols/shadowsocks.sh"
+        "protocols/shadowtls.sh:protocols/shadowtls.sh"
+        "protocols/hysteria2.sh:protocols/hysteria2.sh"
+        "protocols/tuic.sh:protocols/tuic.sh"
+        "protocols/anytls.sh:protocols/anytls.sh"
+    )
+
+    for file_info in "${FILES[@]}"; do
+        local remote_file="${file_info%%:*}"
+        local local_file="${file_info##*:}"
+        local local_path="${INSTALL_DIR}/${local_file}"
+
+        echo -n "更新 ${local_file} ... "
+
+        if curl -fsSL --connect-timeout 10 --max-time 30 \
+            "${REPO_URL}/${remote_file}" -o "${local_path}.tmp"; then
+            mv "${local_path}.tmp" "${local_path}"
+            chmod +x "${local_path}" 2>/dev/null || true
+            echo "✓"
+            ((updated++))
+        else
+            rm -f "${local_path}.tmp" 2>/dev/null
+            echo "✗ (跳过)"
+            ((failed++))
+        fi
+    done
+
+    echo ""
+    echo "更新完成！"
+    echo "  成功: ${updated} 个文件"
+    [[ $failed -gt 0 ]] && echo "  失败: ${failed} 个文件"
+    echo ""
+    echo "按回车键重新启动菜单..."
 }
 
 # ─── Protocol install dispatcher ─────────────────────────────────────────
