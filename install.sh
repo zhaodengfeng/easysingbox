@@ -95,7 +95,7 @@ echo ""
 info "正在安装依赖 ..."
 echo ""
 
-declare -A REQUIRED_DEPS=(["jq"]="jq" ["openssl"]="openssl" ["curl"]="curl" ["wget"]="wget")
+declare -A REQUIRED_DEPS=(["jq"]="jq" ["openssl"]="openssl" ["curl"]="curl" ["wget"]="wget" ["cron"]="cron")
 declare -A OPTIONAL_DEPS=(["qrencode"]="qrencode")
 
 get_pkg_name() {
