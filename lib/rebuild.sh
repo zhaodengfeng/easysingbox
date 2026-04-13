@@ -25,17 +25,13 @@ rebuild_protocol_config() {
     # Build users array based on protocol type
     local users_json="[]"
     case "$protocol" in
-        vless-reality|vless-ws|vless-grpc)
-            local flow="xtls-rprx-vision"
-            [[ "$protocol" == *"ws"* ]] && flow=""
-            [[ "$protocol" == *"grpc"* ]] && flow=""
-            if [[ -n "$flow" ]]; then
-                users_json=$(echo "$active_users" | jq --arg flow "$flow" \
-                    '[.[] | select(.uuid != null) | {uuid: .uuid, flow: $flow}]')
-            else
-                users_json=$(echo "$active_users" | jq \
-                    '[.[] | select(.uuid != null) | {uuid: .uuid}]')
-            fi
+        vless-reality)
+            users_json=$(echo "$active_users" | jq \
+                '[.[] | select(.uuid != null) | {uuid: .uuid, flow: "xtls-rprx-vision"}]')
+            ;;
+        vless-ws|vless-grpc)
+            users_json=$(echo "$active_users" | jq \
+                '[.[] | select(.uuid != null) | {uuid: .uuid}]')
             ;;
         vmess-ws)
             users_json=$(echo "$active_users" | jq \

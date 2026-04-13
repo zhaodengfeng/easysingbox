@@ -133,16 +133,18 @@ add_user() {
     local monthly_limit=0 total_limit=0
     echo ""
     echo "设置流量限额（0 = 不限制）:"
+    echo "  注: 1 GB = 1024 MB (二进制单位)"
     read -rp "月度流量限额 (GB, 默认 0): " monthly_input
     monthly_input="${monthly_input:-0}"
     if [[ "$monthly_input" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-        monthly_limit=$(awk "BEGIN {printf \"%d\", $monthly_input * 1073741824}")
+        # 转换 GB 到字节: 1 GB = 1024^3 bytes = 1073741824 bytes
+        monthly_limit=$(awk "BEGIN {printf \"%.0f\", $monthly_input * 1024 * 1024 * 1024}")
     fi
 
     read -rp "总流量限额 (GB, 默认 0): " total_input
     total_input="${total_input:-0}"
     if [[ "$total_input" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-        total_limit=$(awk "BEGIN {printf \"%d\", $total_input * 1073741824}")
+        total_limit=$(awk "BEGIN {printf \"%.0f\", $total_input * 1024 * 1024 * 1024}")
     fi
 
     read -rp "每月重置日 (1-28, 默认 1): " reset_day
@@ -376,17 +378,23 @@ set_user_traffic_limit() {
     current_limits=$(jq -r --arg name "$username" '.users[] | select(.name == $name) | "月度=\(.traffic_limit_monthly) 总=\(.traffic_limit_total)"' "$USERS_FILE")
     echo "当前限额: $current_limits"
     echo ""
+    echo "注: 1 GB = 1024 MB (二进制单位)"
 
     read -rp "月度流量限额 (GB, 0 = 不限制): " monthly_input
     monthly_input="${monthly_input:-0}"
     if [[ "$monthly_input" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-        monthly_limit=$(awk "BEGIN {printf \"%d\", $monthly_input * 1073741824}")
+        monthly_limit=$(awk "BEGIN {printf \"%.0f\", $monthly_input * 1024 * 1024 * 1024}")
     else
         monthly_limit=0
     fi
 
     read -rp "总流量限额 (GB, 0 = 不限制): " total_input
     total_input="${total_input:-0}"
+    if [[ "$total_input" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        total_limit=$(awk "BEGIN {printf \"%.0f\", $total_input * 1024 * 1024 * 1024}")
+    else
+        total_limit=0
+    fi
     if [[ "$total_input" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
         total_limit=$(awk "BEGIN {printf \"%d\", $total_input * 1073741824}")
     else

@@ -41,13 +41,22 @@ install_vless_reality() {
     }
 
     local private_key public_key
-    private_key=$(echo "$keypair" | awk '/PrivateKey:/{print $2}')
-    public_key=$(echo "$keypair" | awk '/PublicKey:/{print $2}')
 
+    # 优先尝试 JSON 格式解析（更可靠）
+    if echo "$keypair" | jq -e '.private_key and .public_key' &>/dev/null; then
+        private_key=$(echo "$keypair" | jq -r '.private_key')
+        public_key=$(echo "$keypair" | jq -r '.public_key')
+    else
+        # Fallback: 尝试文本格式解析
+        private_key=$(echo "$keypair" | grep -oP 'PrivateKey:\s*\K\S+' 2>/dev/null || echo "")
+        public_key=$(echo "$keypair" | grep -oP 'PublicKey:\s*\K\S+' 2>/dev/null || echo "")
+    fi
+
+    # 验证密钥是否成功获取
     if [[ -z "$private_key" ]] || [[ -z "$public_key" ]]; then
-        # Fallback: try JSON output
-        private_key=$(echo "$keypair" | jq -r '.private_key // empty' 2>/dev/null)
-        public_key=$(echo "$keypair" | jq -r '.public_key // empty' 2>/dev/null)
+        echo "错误: 无法解析密钥对"
+        echo "sing-box 输出: $keypair"
+        return 1
     fi
 
     local short_id

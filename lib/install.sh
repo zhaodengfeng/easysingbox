@@ -12,7 +12,7 @@ install_singbox() {
 
     local api_url="https://api.github.com/repos/SagerNet/sing-box/releases/latest"
     local tag
-    tag=$(curl -s "$api_url" | jq -r '.tag_name' 2>/dev/null)
+    tag=$(curl -s --connect-timeout 10 "$api_url" | jq -r '.tag_name' 2>/dev/null)
 
     if [[ -z "$tag" ]] || [[ "$tag" == "null" ]]; then
         echo "获取 sing-box 版本失败"
@@ -25,10 +25,13 @@ install_singbox() {
     echo "最新版本: $clean_version，正在下载 ..."
 
     local filename="sing-box-${clean_version}-linux-${arch}.tar.gz"
+    local checksum_file="${filename}.sha256sum"
     local download_url="https://github.com/SagerNet/sing-box/releases/download/${tag}/${filename}"
+    local checksum_url="https://github.com/SagerNet/sing-box/releases/download/${tag}/${checksum_file}"
     local tmp_dir
-    tmp_dir=$(mktemp -d)
+    tmp_dir=$(mktemp -d) || { echo "创建临时目录失败"; return 1; }
 
+    # 下载 tar.gz 文件
     if ! curl -fSL --connect-timeout 10 --max-time 120 \
          -o "${tmp_dir}/${filename}" "$download_url"; then
         echo "下载失败: $download_url"
@@ -36,8 +39,28 @@ install_singbox() {
         return 1
     fi
 
+    # 下载校验和文件
+    echo "正在下载校验和文件 ..."
+    if curl -fsSL --connect-timeout 10 --max-time 30 \
+         -o "${tmp_dir}/${checksum_file}" "$checksum_url"; then
+        # 验证校验和
+        echo "正在验证下载文件完整性 ..."
+        if ! (cd "$tmp_dir" && sha256sum -c "$checksum_file" 2>/dev/null); then
+            echo "错误: 下载文件校验和验证失败，文件可能已损坏"
+            rm -rf "$tmp_dir"
+            return 1
+        fi
+        echo "校验和验证通过"
+    else
+        echo "警告: 无法下载校验和文件，跳过完整性验证"
+    fi
+
     echo "正在解压 ..."
-    tar -xzf "${tmp_dir}/${filename}" -C "$tmp_dir"
+    if ! tar -xzf "${tmp_dir}/${filename}" -C "$tmp_dir"; then
+        echo "解压失败"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
 
     # Create directories
     mkdir -p "${INSTALL_DIR}/bin"
@@ -59,6 +82,13 @@ install_singbox() {
 
     chmod +x "$binary"
     mv "$binary" "${INSTALL_DIR}/bin/sing-box"
+
+    # 验证二进制文件可执行
+    if ! "${INSTALL_DIR}/bin/sing-box" version &>/dev/null; then
+        echo "错误: sing-box 二进制文件验证失败"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
 
     # Update state
     if [[ -f "$STATE_FILE" ]]; then

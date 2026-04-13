@@ -70,7 +70,8 @@ gen_port() {
 
 validate_domain() {
     local domain="$1"
-    if [[ "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9._-]{0,253}[a-zA-Z0-9])?$ ]]; then
+    # 域名格式验证：支持子域名，每段 1-63 字符，总长 1-253 字符
+    if [[ "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$ ]]; then
         return 0
     fi
     return 1
@@ -106,11 +107,13 @@ prompt_port() {
 
 validate_ip() {
     local ip="$1"
+    # IPv4 基础格式验证（不验证每段 0-255 范围）
     [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]
 }
 
 validate_email() {
     local email="$1"
+    # 邮箱格式基础验证
     [[ "$email" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]
 }
 
@@ -375,14 +378,27 @@ write_service() {
     cat > "$service_file" <<EOF
 [Unit]
 Description=easy-sing-box - ${protocol}
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
+User=nobody
+Group=nogroup
 ExecStart=${INSTALL_DIR}/bin/sing-box run -c ${CONFIG_DIR}/${protocol}/inbound.json
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=${INSTALL_DIR}
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictRealtime=true
+DevicePolicy=closed
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 
 [Install]
 WantedBy=multi-user.target

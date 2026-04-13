@@ -4,7 +4,7 @@ set -euo pipefail
 # easysingbox.sh — sing-box 代理协议一键部署方案
 # Repo: https://github.com/zhaodengfeng/easysingbox
 
-readonly VERSION="0.1.5"
+readonly VERSION="0.2.0"
 readonly INSTALL_DIR="/opt/easy-singbox"
 readonly CONFIG_DIR="${INSTALL_DIR}/config"
 readonly TLS_DIR="${INSTALL_DIR}/tls"
@@ -57,9 +57,48 @@ main() {
     mkdir -p "$CONFIG_DIR" "$TLS_DIR" "$SERVICE_DIR" "$MONTHLY_DIR"
 
     while true; do
-        print_menu
-        read -rp "请选择 [0-22]: " choice
+        print_main_menu
+        read -rp "请选择 [0-4]: " choice
         echo ""
+
+        case "$choice" in
+            1) menu_protocol_management ;;
+            2) menu_user_management ;;
+            3) menu_service_management ;;
+            4) menu_traffic_management ;;
+            0) echo "Bye!"; exit 0 ;;
+            *)  echo "无效选项" ;;
+        esac
+
+        echo ""
+        read -rp "按回车键继续..."
+    done
+}
+
+print_main_menu() {
+    clear
+    echo "easy-sing-box v${VERSION}"
+    echo ""
+    echo "┌─────────────────────────────────────┐"
+    echo "│  【1】协议管理                      │"
+    echo "│  【2】用户管理                      │"
+    echo "│  【3】服务管理                      │"
+    echo "│  【4】流量统计                      │"
+    echo "│  【0】退出                          │"
+    echo "└─────────────────────────────────────┘"
+    echo ""
+}
+
+# ─── Protocol Management Menu ─────────────────────────────────────
+
+menu_protocol_management() {
+    while true; do
+        print_protocol_menu
+        read -rp "请选择 [0/q]: " choice
+        echo ""
+
+        # 快捷字母处理
+        choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
 
         case "$choice" in
             1)  install_protocol "vless-reality" ;;
@@ -72,20 +111,11 @@ main() {
             8)  install_protocol "hysteria2" ;;
             9)  install_protocol "tuic" ;;
             10) install_protocol "anytls" ;;
-            11) add_user ;;
-            12) remove_user ;;
-            13) toggle_user ;;
-            14) reset_user_traffic ;;
-            15) set_user_traffic_limit ;;
-            16) list_users ;;
-            17) show_all_status ;;
-            18) manage_service_action ;;
-            19) uninstall_protocol ;;
-            20) upgrade_singbox_menu ;;
-            21) view_share_links ;;
-            22) view_traffic_stats ;;
-            0)  echo "Bye!"; exit 0 ;;
-            *)  echo "无效选项" ;;
+            s)   show_all_status ;;
+            u)   menu_service_control ;;
+            d)   uninstall_protocol ;;
+            q)   view_share_links ;;
+            0|*)  return ;;
         esac
 
         echo ""
@@ -93,39 +123,171 @@ main() {
     done
 }
 
-print_menu() {
+print_protocol_menu() {
     clear
-    echo "easy-sing-box v${VERSION}"
+    echo "┌────────── 协议管理 ──────────┐"
     echo ""
-    echo "【协议管理】"
-    echo "  1.  安装 VLESS + Reality"
-    echo "  2.  安装 VLESS + WebSocket + TLS"
-    echo "  3.  安装 VLESS + gRPC + TLS"
-    echo "  4.  安装 VMess + WebSocket + TLS"
-    echo "  5.  安装 Trojan + TLS"
-    echo "  6.  安装 Shadowsocks"
-    echo "  7.  安装 ShadowTLS + Shadowsocks"
-    echo "  8.  安装 Hysteria 2"
-    echo "  9.  安装 TUIC v5"
-    echo "  10. 安装 AnyTLS"
+    echo "【安装协议】"
+    echo "  1.  VLESS + Reality     (无需域名)"
+    echo "  2.  VLESS + WS + TLS    (需域名+证书)"
+    echo "  3.  VLESS + gRPC + TLS  (需域名+证书)"
+    echo "  4.  VMess + WS + TLS    (需域名+证书)"
+    echo "  5.  Trojan + TLS        (需域名+证书)"
+    echo "  6.  Shadowsocks         (无需域名)"
+    echo "  7.  ShadowTLS + SS      (需域名+证书)"
+    echo "  8.  Hysteria 2         (需域名+证书)"
+    echo "  9.  TUIC v5            (需域名+证书)"
+    echo " 10. AnyTLS             (需域名+证书)"
     echo ""
-    echo "【用户管理】"
-    echo "  11. 添加用户"
-    echo "  12. 删除用户"
-    echo "  13. 启用/禁用用户"
-    echo "  14. 重置用户流量"
-    echo "  15. 设置用户流量限额"
-    echo "  16. 查看用户列表及流量"
+    echo "【管理已安装协议】"
+    echo "  s.  查看所有协议状态"
+    echo "  u.  启动/停止/重启协议"
+    echo "  d.  卸载协议"
+    echo "  q.  查看分享链接"
     echo ""
-    echo "【服务管理】"
-    echo "  17. 查看所有协议状态"
-    echo "  18. 启动/停止/重启指定协议"
-    echo "  19. 卸载指定协议"
-    echo "  20. 升级 sing-box"
-    echo "  21. 查看分享链接/二维码"
-    echo "  22. 查看流量统计（本月/累计）"
-    echo "  0. 退出"
+    echo "  0.  返回主菜单"
+    echo "└───────────────────────────────────┘"
     echo ""
+}
+
+# ─── User Management Menu ───────────────────────────────────────
+
+menu_user_management() {
+    while true; do
+        clear
+        echo "┌────────── 用户管理 ──────────┐"
+        echo ""
+        echo "  1.  添加用户"
+        echo "  2.  删除用户"
+        echo "  3.  启用/禁用用户"
+        echo "  4.  重置用户流量"
+        echo "  5.  设置流量限额"
+        echo "  6.  查看用户列表"
+        echo ""
+        echo "  0.  返回主菜单"
+        echo "└───────────────────────────────────┘"
+        echo ""
+        read -rp "请选择 [0-6]: " choice
+        echo ""
+
+        case "$choice" in
+            1) add_user ;;
+            2) remove_user ;;
+            3) toggle_user ;;
+            4) reset_user_traffic ;;
+            5) set_user_traffic_limit ;;
+            6) list_users ;;
+            0|*)  return ;;
+        esac
+
+        echo ""
+        read -rp "按回车键继续..."
+    done
+}
+
+# ─── Service Management Menu ─────────────────────────────────────
+
+menu_service_management() {
+    while true; do
+        clear
+        echo "┌────────── 服务管理 ──────────┐"
+        echo ""
+        echo "  1.  查看所有协议状态"
+        echo "  2.  启动/停止/重启协议"
+        echo "  3.  卸载协议"
+        echo "  4.  升级 sing-box"
+        echo "  5.  查看分享链接/二维码"
+        echo ""
+        echo "  0.  返回主菜单"
+        echo "└───────────────────────────────────┘"
+        echo ""
+        read -rp "请选择 [0-5]: " choice
+        echo ""
+
+        case "$choice" in
+            1) show_all_status ;;
+            2) menu_service_control ;;
+            3) uninstall_protocol ;;
+            4) upgrade_singbox_menu ;;
+            5) view_share_links ;;
+            0|*)  return ;;
+        esac
+
+        echo ""
+        read -rp "按回车键继续..."
+    done
+}
+
+menu_service_control() {
+    if [[ ! -f "$STATE_FILE" ]]; then
+        echo "尚未安装任何协议"
+        return
+    fi
+
+    local protocols
+    protocols=$(jq -r '.protocols | keys[]' "$STATE_FILE" 2>/dev/null)
+    [[ -z "$protocols" ]] && { echo "尚未安装任何协议"; return; }
+
+    clear
+    echo "┌────────── 协议控制 ──────────┐"
+    echo ""
+    echo "已安装的协议:"
+    echo "$protocols" | nl -w2 -s'. '
+    echo ""
+    read -rp "选择协议编号 (0 返回): " idx
+    idx=$(echo "$idx" | tr -d ' ')
+    [[ "$idx" == "0" ]] && return
+
+    local protocol
+    protocol=$(echo "$protocols" | sed -n "${idx}p")
+    [[ -z "$protocol" ]] && { echo "无效选择"; return; }
+
+    clear
+    echo "┌────────── 协议: $protocol ──────────┐"
+    echo ""
+    echo "  1.  启动"
+    echo "  2.  停止"
+    echo "  3.  重启"
+    echo "  0.  返回"
+    echo "└───────────────────────────────────────┘"
+    echo ""
+    read -rp "选择操作: " action
+
+    case "$action" in
+        1) start_service "$protocol"; echo "已启动 $protocol" ;;
+        2) stop_service "$protocol"; echo "已停止 $protocol" ;;
+        3) restart_service "$protocol"; echo "已重启 $protocol" ;;
+        *) echo "无效操作" ;;
+    esac
+}
+
+# ─── Traffic Management Menu ─────────────────────────────────────
+
+menu_traffic_management() {
+    while true; do
+        clear
+        echo "┌────────── 流量统计 ──────────┐"
+        echo ""
+        echo "  1.  本月流量"
+        echo "  2.  累计总流量"
+        echo "  3.  历史月份"
+        echo ""
+        echo "  0.  返回主菜单"
+        echo "└───────────────────────────────────┘"
+        echo ""
+        read -rp "请选择 [0-3]: " choice
+        echo ""
+
+        case "$choice" in
+            1) show_monthly_traffic "$(date +%Y-%m)" ;;
+            2) show_total_traffic ;;
+            3) show_history_months ;;
+            0|*)  return ;;
+        esac
+
+        echo ""
+        read -rp "按回车键继续..."
+    done
 }
 
 # ─── Protocol install dispatcher ─────────────────────────────────────────
@@ -171,7 +333,7 @@ get_server_ip() {
     curl -s --max-time 5 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}'
 }
 
-# ─── Service Management Menu ──────────────────────────────────────────────
+# ─── Service Management Functions ──────────────────────────────────────────────
 
 show_all_status() {
     if [[ ! -f "$STATE_FILE" ]]; then
@@ -192,40 +354,6 @@ show_all_status() {
     done
 }
 
-manage_service_action() {
-    if [[ ! -f "$STATE_FILE" ]]; then
-        echo "尚未安装任何协议"
-        return
-    fi
-
-    local protocols
-    protocols=$(jq -r '.protocols | keys[]' "$STATE_FILE" 2>/dev/null)
-    [[ -z "$protocols" ]] && { echo "尚未安装任何协议"; return; }
-
-    echo "已安装的协议:"
-    echo "$protocols" | nl -w2 -s'. '
-    echo ""
-    read -rp "选择协议编号: " idx
-    idx=$(echo "$idx" | tr -d ' ')
-
-    local protocol
-    protocol=$(echo "$protocols" | sed -n "${idx}p")
-    [[ -z "$protocol" ]] && { echo "无效选择"; return; }
-
-    echo ""
-    echo "1. 启动"
-    echo "2. 停止"
-    echo "3. 重启"
-    read -rp "选择操作: " action
-
-    case "$action" in
-        1) start_service "$protocol"; echo "已启动 $protocol" ;;
-        2) stop_service "$protocol"; echo "已停止 $protocol" ;;
-        3) restart_service "$protocol"; echo "已重启 $protocol" ;;
-        *) echo "无效操作" ;;
-    esac
-}
-
 uninstall_protocol() {
     if [[ ! -f "$STATE_FILE" ]]; then
         echo "尚未安装任何协议"
@@ -236,11 +364,13 @@ uninstall_protocol() {
     protocols=$(jq -r '.protocols | keys[]' "$STATE_FILE" 2>/dev/null)
     [[ -z "$protocols" ]] && { echo "尚未安装任何协议"; return; }
 
+    clear
     echo "已安装的协议:"
     echo "$protocols" | nl -w2 -s'. '
     echo ""
-    read -rp "选择要卸载的协议编号: " idx
+    read -rp "选择要卸载的协议编号 (0 返回): " idx
     idx=$(echo "$idx" | tr -d ' ')
+    [[ "$idx" == "0" ]] && return
 
     local protocol
     protocol=$(echo "$protocols" | sed -n "${idx}p")
