@@ -6,7 +6,7 @@ set -euo pipefail
 # 用法 2: git clone 后 sudo bash install.sh
 
 readonly TARGET_DIR="/opt/easysingbox"
-readonly INSTALLER_VERSION="0.2.2"
+readonly INSTALLER_VERSION="0.2.3"
 REPO_URL="https://raw.githubusercontent.com/zhaodengfeng/easysingbox/main"
 
 # ─── Colors ───────────────────────────────────────────────────────────────

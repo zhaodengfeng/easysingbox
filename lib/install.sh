@@ -25,9 +25,7 @@ install_singbox() {
     echo "最新版本: $clean_version，正在下载 ..."
 
     local filename="sing-box-${clean_version}-linux-${arch}.tar.gz"
-    local checksum_file="${filename}.sha256sum"
     local download_url="https://github.com/SagerNet/sing-box/releases/download/${tag}/${filename}"
-    local checksum_url="https://github.com/SagerNet/sing-box/releases/download/${tag}/${checksum_file}"
     local tmp_dir
     tmp_dir=$(mktemp -d) || { echo "创建临时目录失败"; return 1; }
 
@@ -37,22 +35,6 @@ install_singbox() {
         echo "下载失败: $download_url"
         rm -rf "$tmp_dir"
         return 1
-    fi
-
-    # 下载校验和文件
-    echo "正在下载校验和文件 ..."
-    if curl -fsSL --connect-timeout 10 --max-time 30 \
-         -o "${tmp_dir}/${checksum_file}" "$checksum_url"; then
-        # 验证校验和
-        echo "正在验证下载文件完整性 ..."
-        if ! (cd "$tmp_dir" && sha256sum -c "$checksum_file" 2>/dev/null); then
-            echo "错误: 下载文件校验和验证失败，文件可能已损坏"
-            rm -rf "$tmp_dir"
-            return 1
-        fi
-        echo "校验和验证通过"
-    else
-        echo "警告: 无法下载校验和文件，跳过完整性验证"
     fi
 
     echo "正在解压 ..."

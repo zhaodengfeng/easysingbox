@@ -52,7 +52,7 @@ sudo easysingbox
 ## 管理菜单
 
 ```
-EasySingBox v0.2.2"
+EasySingBox v0.2.3"
 
 ┌─────────────────────────────────────┐
 │  【1】安装协议                      │
