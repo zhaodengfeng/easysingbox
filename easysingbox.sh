@@ -69,7 +69,7 @@ main() {
             2) protocol_control_menu ;;
             3) menu_user_management ;;
             4) menu_traffic_management ;;
-            5) menu_system_update ;;
+            5) menu_system_management ;;
             0) echo "Bye!"; exit 0 ;;
             *)  echo "无效选项" ;;
         esac
@@ -85,7 +85,7 @@ print_main_menu() {
     echo "│  【2】协议控制                      │"
     echo "│  【3】用户管理                      │"
     echo "│  【4】流量统计                      │"
-    echo "│  【5】系统更新                      │"
+    echo "│  【5】系统管理                      │"
     echo "│  【0】退出                          │"
     echo "└─────────────────────────────────────┘"
     echo ""
@@ -345,28 +345,74 @@ menu_traffic_management() {
     done
 }
 
-# ─── System Update Menu ──────────────────────────────────────────────────
+# ─── System Management Menu ──────────────────────────────────────────────
 
-menu_system_update() {
+menu_system_management() {
     while true; do
         clear
-        echo "┌────────── 系统更新 ──────────┐"
+        echo "┌────────── 系统管理 ──────────┐"
         echo ""
         echo "  1.  更新脚本"
         echo "  2.  升级 sing-box"
+        echo "  3.  彻底卸载所有服务并删除脚本"
         echo ""
         echo "  0.  返回主菜单"
         echo "└───────────────────────────────────┘"
         echo ""
-        read -rp "请选择 [0-2]: " choice
+        read -rp "请选择 [0-3]: " choice
         echo ""
 
         case "$choice" in
             1) update_self ;;
             2) upgrade_singbox_menu ;;
+            3) uninstall_all ;;
             0|*) return ;;
         esac
     done
+}
+
+# ─── Uninstall All ───────────────────────────────────────────────────────
+
+uninstall_all() {
+    echo "⚠️  确定要彻底卸载所有服务并删除 easysingbox 脚本吗？"
+    echo "   这将删除所有协议配置、用户数据、流量记录和脚本文件，不可恢复！"
+    echo ""
+    read -rp "请输入 yes 确认卸载: " confirm
+    [[ "$confirm" == "yes" ]] || { echo "已取消"; sleep 1; return; }
+    echo ""
+
+    echo "正在停止所有 sing-box 服务 ..."
+    systemctl stop 'singbox-*' 2>/dev/null || true
+
+    # Remove hysteria2 port hopping rules if present
+    if [[ -f "$STATE_FILE" ]]; then
+        local hp_start hp_end hp_port
+        hp_start=$(jq -r '.protocols["hysteria2"].hop_start // empty' "$STATE_FILE" 2>/dev/null)
+        hp_end=$(jq -r '.protocols["hysteria2"].hop_end // empty' "$STATE_FILE" 2>/dev/null)
+        hp_port=$(jq -r '.protocols["hysteria2"].port // empty' "$STATE_FILE" 2>/dev/null)
+        if [[ -n "$hp_start" && -n "$hp_end" && -n "$hp_port" ]]; then
+            remove_port_hopping "$hp_port" "$hp_start" "$hp_end"
+            echo "Hysteria2 端口跳跃规则已清理"
+        fi
+    fi
+
+    echo "正在删除 systemd 服务 ..."
+    rm -f /etc/systemd/system/singbox-*.service
+    rm -f "${SERVICE_DIR}/"singbox-*.service
+    systemctl daemon-reload
+
+    echo "正在删除 cron 任务 ..."
+    rm -f /etc/cron.d/easysingbox-traffic
+
+    echo "正在删除安装目录和命令 ..."
+    rm -rf "$INSTALL_DIR"
+    rm -f /usr/local/bin/easysingbox
+
+    echo ""
+    echo "✅ easysingbox 已彻底卸载完毕！"
+    echo ""
+    read -rp "按回车键退出 ..." _
+    exit 0
 }
 
 # ─── Update Self ────────────────────────────────────────────────────────
