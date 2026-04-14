@@ -5,7 +5,7 @@ set -euo pipefail
 # Repo: https://github.com/zhaodengfeng/easysingbox
 
 readonly VERSION="0.2.0"
-readonly INSTALL_DIR="/opt/easy-singbox"
+readonly INSTALL_DIR="/opt/easysingbox"
 readonly CONFIG_DIR="${INSTALL_DIR}/config"
 readonly TLS_DIR="${INSTALL_DIR}/tls"
 readonly SERVICE_DIR="${INSTALL_DIR}/service"
@@ -58,24 +58,21 @@ main() {
 
     while true; do
         print_main_menu
-        read -rp "请选择 [0-4/u]: " choice
+        read -rp "请选择 [0-5]: " choice
         echo ""
 
         # 快捷字母处理
         choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
 
         case "$choice" in
-            1) menu_protocol_management ;;
-            2) menu_user_management ;;
-            3) menu_service_management ;;
+            1) menu_install_protocol ;;
+            2) protocol_control_menu ;;
+            3) menu_user_management ;;
             4) menu_traffic_management ;;
-            u) update_self ;;
+            5) menu_system_update ;;
             0) echo "Bye!"; exit 0 ;;
             *)  echo "无效选项" ;;
         esac
-
-        echo ""
-        read -rp "按回车键继续..."
     done
 }
 
@@ -84,25 +81,24 @@ print_main_menu() {
     echo "easy-sing-box v${VERSION}"
     echo ""
     echo "┌─────────────────────────────────────┐"
-    echo "│  【1】协议管理                      │"
-    echo "│  【2】用户管理                      │"
-    echo "│  【3】服务管理                      │"
+    echo "│  【1】安装协议                      │"
+    echo "│  【2】协议控制                      │"
+    echo "│  【3】用户管理                      │"
     echo "│  【4】流量统计                      │"
-    echo "│  【u】更新脚本                      │"
+    echo "│  【5】系统更新                      │"
     echo "│  【0】退出                          │"
     echo "└─────────────────────────────────────┘"
     echo ""
 }
 
-# ─── Protocol Management Menu ─────────────────────────────────────
+# ─── Install Protocol Menu ─────────────────────────────────────
 
-menu_protocol_management() {
+menu_install_protocol() {
     while true; do
-        print_protocol_menu
-        read -rp "请选择 [0/q]: " choice
+        print_install_protocol_menu
+        read -rp "请选择 [0-10]: " choice
         echo ""
 
-        # 快捷字母处理
         choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
 
         case "$choice" in
@@ -116,23 +112,15 @@ menu_protocol_management() {
             8)  install_protocol "hysteria2" ;;
             9)  install_protocol "tuic" ;;
             10) install_protocol "anytls" ;;
-            s)   show_all_status ;;
-            u)   menu_service_control ;;
-            d)   uninstall_protocol ;;
-            q)   view_share_links ;;
-            0|*)  return ;;
+            0|*) return ;;
         esac
-
-        echo ""
-        read -rp "按回车键继续..."
     done
 }
 
-print_protocol_menu() {
+print_install_protocol_menu() {
     clear
-    echo "┌────────── 协议管理 ──────────┐"
+    echo "┌────────── 安装协议 ──────────┐"
     echo ""
-    echo "【安装协议】"
     echo "  1.  VLESS + Reality     (无需域名)"
     echo "  2.  VLESS + WS + TLS    (需域名+证书)"
     echo "  3.  VLESS + gRPC + TLS  (需域名+证书)"
@@ -144,15 +132,159 @@ print_protocol_menu() {
     echo "  9.  TUIC v5            (需域名+证书)"
     echo " 10. AnyTLS             (需域名+证书)"
     echo ""
-    echo "【管理已安装协议】"
-    echo "  s.  查看所有协议状态"
-    echo "  u.  启动/停止/重启协议"
-    echo "  d.  卸载协议"
-    echo "  q.  查看分享链接"
-    echo ""
     echo "  0.  返回主菜单"
     echo "└───────────────────────────────────┘"
     echo ""
+}
+
+# ─── Protocol Control Menu ─────────────────────────────────────
+
+protocol_control_menu() {
+    while true; do
+        clear
+        if [[ ! -f "$STATE_FILE" ]]; then
+            echo "尚未安装任何协议"
+            read -rp "按回车键返回..." _
+            return
+        fi
+
+        local protocols
+        protocols=$(jq -r '.protocols | keys[]' "$STATE_FILE" 2>/dev/null)
+        if [[ -z "$protocols" ]]; then
+            echo "尚未安装任何协议"
+            read -rp "按回车键返回..." _
+            return
+        fi
+
+        local singbox_version
+        singbox_version=$(jq -r '.version // "unknown"' "$STATE_FILE")
+
+        echo "=== 协议控制 (sing-box $singbox_version) ==="
+        echo ""
+        local i=1
+        while IFS= read -r proto; do
+            local port status domain
+            port=$(jq -r ".protocols[\"$proto\"].port // \"-\"" "$STATE_FILE")
+            status=$(jq -r ".protocols[\"$proto\"].status // \"-\"" "$STATE_FILE")
+            domain=$(jq -r ".protocols[\"$proto\"].domain // \"-\"" "$STATE_FILE")
+            printf " %2d. %-18s 端口:%-6s 状态:%-8s 域名:%s\n" "$i" "$proto" "$port" "$status" "$domain"
+            i=$((i + 1))
+        done <<< "$protocols"
+        echo ""
+        echo "快速操作: [编号][s]启停 [r]重启 [q]链接 [u]卸载  或只输编号进菜单  (0 返回)"
+        read -rp "选择: " action
+
+        action=$(echo "$action" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+        [[ "$action" == "0" ]] && return
+
+        local idx cmd protocol
+        idx=$(echo "$action" | sed 's/[^0-9]//g')
+        cmd=$(echo "$action" | sed 's/[0-9]//g')
+
+        protocol=$(echo "$protocols" | sed -n "${idx}p")
+        if [[ -z "$protocol" ]]; then
+            echo "无效选择"
+            sleep 1
+            continue
+        fi
+
+        case "$cmd" in
+            s)
+                if systemctl is-active --quiet "$(get_service_name "$protocol")"; then
+                    stop_service "$protocol"
+                    echo "已停止 $protocol"
+                else
+                    start_service "$protocol"
+                    echo "已启动 $protocol"
+                fi
+                sleep 1
+                ;;
+            r)
+                restart_service "$protocol"
+                echo "已重启 $protocol"
+                sleep 1
+                ;;
+            q)
+                view_share_link_for_protocol "$protocol"
+                ;;
+            u)
+                do_uninstall_protocol "$protocol"
+                ;;
+            "")
+                protocol_action_menu "$protocol"
+                ;;
+            *)
+                echo "无效操作: $cmd"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+protocol_action_menu() {
+    local protocol="$1"
+    while true; do
+        clear
+        local port status domain
+        port=$(jq -r ".protocols[\"$protocol\"].port // \"-\"" "$STATE_FILE")
+        status=$(jq -r ".protocols[\"$protocol\"].status // \"-\"" "$STATE_FILE")
+        domain=$(jq -r ".protocols[\"$protocol\"].domain // \"-\"" "$STATE_FILE")
+
+        echo "┌────────── $protocol ──────────┐"
+        echo "  端口: $port  状态: $status  域名: $domain"
+        echo ""
+        echo "  [s]  启动/停止"
+        echo "  [r]  重启"
+        echo "  [q]  分享链接/二维码"
+        echo "  [u]  卸载"
+        echo "  [0]  返回"
+        echo "└───────────────────────────────────┘"
+        echo ""
+        read -rp "选择: " action
+        action=$(echo "$action" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+
+        case "$action" in
+            s)
+                if systemctl is-active --quiet "$(get_service_name "$protocol")"; then
+                    stop_service "$protocol"; echo "已停止 $protocol"
+                else
+                    start_service "$protocol"; echo "已启动 $protocol"
+                fi
+                sleep 1
+                ;;
+            r) restart_service "$protocol"; echo "已重启 $protocol"; sleep 1 ;;
+            q) view_share_link_for_protocol "$protocol" ;;
+            u) do_uninstall_protocol "$protocol"; return ;;
+            0|*) return ;;
+        esac
+    done
+}
+
+view_share_link_for_protocol() {
+    local protocol="$1"
+    clear
+    echo "=== $protocol 分享链接 ==="
+    echo ""
+    local share_dir="${CONFIG_DIR}/${protocol}/share-link"
+    local found=0
+    if [[ -d "$share_dir" ]]; then
+        for f in "$share_dir"/*.txt; do
+            [[ -f "$f" ]] || continue
+            found=1
+            local username
+            username=$(basename "$f" .txt)
+            echo "--- $username ---"
+            cat "$f"
+            echo ""
+            if command -v qrencode &>/dev/null; then
+                qrencode -t ANSIUTF8 -s 3 -m 1 < "$f"
+                echo ""
+            fi
+        done
+    fi
+    [[ "$found" == "0" ]] && echo "暂无分享链接"
+    echo ""
+    read -rp "按回车键继续..." _
 }
 
 # ─── User Management Menu ───────────────────────────────────────
@@ -182,88 +314,9 @@ menu_user_management() {
             4) reset_user_traffic ;;
             5) set_user_traffic_limit ;;
             6) list_users ;;
-            0|*)  return ;;
+            0|*) return ;;
         esac
-
-        echo ""
-        read -rp "按回车键继续..."
     done
-}
-
-# ─── Service Management Menu ─────────────────────────────────────
-
-menu_service_management() {
-    while true; do
-        clear
-        echo "┌────────── 服务管理 ──────────┐"
-        echo ""
-        echo "  1.  查看所有协议状态"
-        echo "  2.  启动/停止/重启协议"
-        echo "  3.  卸载协议"
-        echo "  4.  升级 sing-box"
-        echo "  5.  查看分享链接/二维码"
-        echo ""
-        echo "  0.  返回主菜单"
-        echo "└───────────────────────────────────┘"
-        echo ""
-        read -rp "请选择 [0-5]: " choice
-        echo ""
-
-        case "$choice" in
-            1) show_all_status ;;
-            2) menu_service_control ;;
-            3) uninstall_protocol ;;
-            4) upgrade_singbox_menu ;;
-            5) view_share_links ;;
-            0|*)  return ;;
-        esac
-
-        echo ""
-        read -rp "按回车键继续..."
-    done
-}
-
-menu_service_control() {
-    if [[ ! -f "$STATE_FILE" ]]; then
-        echo "尚未安装任何协议"
-        return
-    fi
-
-    local protocols
-    protocols=$(jq -r '.protocols | keys[]' "$STATE_FILE" 2>/dev/null)
-    [[ -z "$protocols" ]] && { echo "尚未安装任何协议"; return; }
-
-    clear
-    echo "┌────────── 协议控制 ──────────┐"
-    echo ""
-    echo "已安装的协议:"
-    echo "$protocols" | nl -w2 -s'. '
-    echo ""
-    read -rp "选择协议编号 (0 返回): " idx
-    idx=$(echo "$idx" | tr -d ' ')
-    [[ "$idx" == "0" ]] && return
-
-    local protocol
-    protocol=$(echo "$protocols" | sed -n "${idx}p")
-    [[ -z "$protocol" ]] && { echo "无效选择"; return; }
-
-    clear
-    echo "┌────────── 协议: $protocol ──────────┐"
-    echo ""
-    echo "  1.  启动"
-    echo "  2.  停止"
-    echo "  3.  重启"
-    echo "  0.  返回"
-    echo "└───────────────────────────────────────┘"
-    echo ""
-    read -rp "选择操作: " action
-
-    case "$action" in
-        1) start_service "$protocol"; echo "已启动 $protocol" ;;
-        2) stop_service "$protocol"; echo "已停止 $protocol" ;;
-        3) restart_service "$protocol"; echo "已重启 $protocol" ;;
-        *) echo "无效操作" ;;
-    esac
 }
 
 # ─── Traffic Management Menu ─────────────────────────────────────
@@ -287,11 +340,32 @@ menu_traffic_management() {
             1) show_monthly_traffic "$(date +%Y-%m)" ;;
             2) show_total_traffic ;;
             3) show_history_months ;;
-            0|*)  return ;;
+            0|*) return ;;
         esac
+    done
+}
 
+# ─── System Update Menu ──────────────────────────────────────────────────
+
+menu_system_update() {
+    while true; do
+        clear
+        echo "┌────────── 系统更新 ──────────┐"
         echo ""
-        read -rp "按回车键继续..."
+        echo "  1.  更新脚本"
+        echo "  2.  升级 sing-box"
+        echo ""
+        echo "  0.  返回主菜单"
+        echo "└───────────────────────────────────┘"
+        echo ""
+        read -rp "请选择 [0-2]: " choice
+        echo ""
+
+        case "$choice" in
+            1) update_self ;;
+            2) upgrade_singbox_menu ;;
+            0|*) return ;;
+        esac
     done
 }
 
@@ -409,6 +483,7 @@ get_server_ip() {
 show_all_status() {
     if [[ ! -f "$STATE_FILE" ]]; then
         echo "尚未安装任何协议"
+        read -rp "按回车键继续..." _
         return
     fi
 
@@ -423,6 +498,42 @@ show_all_status() {
     while IFS='|' read -r proto port status domain; do
         printf "%-20s %-8s %-8s %-10s\n" "$proto" "$port" "$status" "$domain"
     done
+    echo ""
+    read -rp "按回车键继续..." _
+}
+
+do_uninstall_protocol() {
+    local protocol="$1"
+    echo "确定卸载协议 $protocol？这将删除配置但保留用户数据 [y/N]"
+    read -rp "" confirm
+    [[ "$confirm" =~ ^[Yy]$ ]] || return
+
+    stop_service "$protocol"
+
+    if [[ "$protocol" == "hysteria2" ]]; then
+        local hp_start hp_end hp_port
+        hp_start=$(jq -r '.protocols["hysteria2"].hop_start // empty' "$STATE_FILE" 2>/dev/null)
+        hp_end=$(jq -r '.protocols["hysteria2"].hop_end // empty' "$STATE_FILE" 2>/dev/null)
+        hp_port=$(jq -r '.protocols["hysteria2"].port // empty' "$STATE_FILE" 2>/dev/null)
+        if [[ -n "$hp_start" ]] && [[ -n "$hp_end" ]] && [[ -n "$hp_port" ]]; then
+            remove_port_hopping "$hp_port" "$hp_start" "$hp_end"
+            echo "端口跳跃 iptables 规则已清理"
+        fi
+    fi
+
+    local service_name
+    service_name=$(get_service_name "$protocol")
+    rm -f "/etc/systemd/system/${service_name}.service"
+    rm -f "${SERVICE_DIR}/${service_name}.service"
+    systemctl daemon-reload
+
+    rm -rf "${CONFIG_DIR}/${protocol}"
+    delete_protocol_state "$protocol"
+
+    jq --arg proto "$protocol" '.users[].protocols |= map(select(. != $proto))' \
+        "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+
+    echo "协议 $protocol 已卸载"
 }
 
 uninstall_protocol() {
@@ -447,43 +558,7 @@ uninstall_protocol() {
     protocol=$(echo "$protocols" | sed -n "${idx}p")
     [[ -z "$protocol" ]] && { echo "无效选择"; return; }
 
-    echo "确定卸载协议 $protocol？这将删除配置但保留用户数据 [y/N]"
-    read -rp "" confirm
-    [[ "$confirm" =~ ^[Yy]$ ]] || return
-
-    # Stop service
-    stop_service "$protocol"
-
-    # Remove port hopping rules if hysteria2
-    if [[ "$protocol" == "hysteria2" ]]; then
-        local hp_start hp_end hp_port
-        hp_start=$(jq -r '.protocols["hysteria2"].hop_start // empty' "$STATE_FILE" 2>/dev/null)
-        hp_end=$(jq -r '.protocols["hysteria2"].hop_end // empty' "$STATE_FILE" 2>/dev/null)
-        hp_port=$(jq -r '.protocols["hysteria2"].port // empty' "$STATE_FILE" 2>/dev/null)
-        if [[ -n "$hp_start" ]] && [[ -n "$hp_end" ]] && [[ -n "$hp_port" ]]; then
-            remove_port_hopping "$hp_port" "$hp_start" "$hp_end"
-            echo "端口跳跃 iptables 规则已清理"
-        fi
-    fi
-
-    # Remove service file
-    local service_name
-    service_name=$(get_service_name "$protocol")
-    rm -f "/etc/systemd/system/${service_name}.service"
-    rm -f "${SERVICE_DIR}/${service_name}.service"
-    systemctl daemon-reload
-
-    # Remove config
-    rm -rf "${CONFIG_DIR}/${protocol}"
-
-    # Remove from state
-    delete_protocol_state "$protocol"
-
-    # Update users - remove protocol from all users
-    jq --arg proto "$protocol" '.users[].protocols |= map(select(. != $proto))' \
-        "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
-
-    echo "协议 $protocol 已卸载"
+    do_uninstall_protocol "$protocol"
 }
 
 main "$@"

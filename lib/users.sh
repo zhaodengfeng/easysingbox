@@ -445,6 +445,8 @@ list_users() {
 
         printf "%-12s %-8s %-30s %-15s %-15s %-10s\n" "$name" "$status" "$protos" "$used_m_str" "$used_t_str" "$limit_m_str"
     done
+    echo ""
+    read -rp "按回车键继续..." _
 }
 
 format_bytes() {

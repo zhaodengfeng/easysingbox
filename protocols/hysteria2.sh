@@ -166,9 +166,7 @@ install_hysteria2() {
                     certificate_path: $cert,
                     key_path: $key
                 },
-                ignore_client_bandwidth: false,
-                up_mbps: 100,
-                down_mbps: 100
+                ignore_client_bandwidth: true
             }],
             outbounds: [{ type: "direct", tag: "direct" }],
             experimental: {

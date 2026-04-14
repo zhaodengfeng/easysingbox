@@ -41,13 +41,13 @@ sudo bash install.sh
 
 ```bash
 # 如果是旧版本，先更新主脚本（带更新功能）
-curl -fsSL https://raw.githubusercontent.com/zhaodengfeng/easysingbox/main/easysingbox.sh | sudo tee /opt/easy-singbox/easysingbox.sh >/dev/null && sudo chmod +x /opt/easy-singbox/easysingbox.sh
+curl -fsSL https://raw.githubusercontent.com/zhaodengfeng/easysingbox/main/easysingbox.sh | sudo tee /opt/easysingbox/easysingbox.sh >/dev/null && sudo chmod +x /opt/easysingbox/easysingbox.sh
 
 # 之后所有更新：运行 easysingbox，在主菜单输入 u
 sudo easysingbox
 ```
 
-更新时会自动备份当前文件到 `/opt/easy-singbox/.backup/` 目录。
+更新时会自动备份当前文件到 `/opt/easysingbox/.backup/` 目录。
 
 ## 管理菜单
 
@@ -114,7 +114,7 @@ easy-sing-box v0.2.0
 ## 目录结构
 
 ```
-/opt/easy-singbox/
+/opt/easysingbox/
 ├── easysingbox.sh              # 主入口
 ├── bin/
 │   └── sing-box                # sing-box 二进制

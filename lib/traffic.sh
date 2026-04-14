@@ -120,7 +120,7 @@ collect_all_traffic() {
 # ─── Cron Setup ───────────────────────────────────────────────────────────
 
 setup_traffic_cron() {
-    local cron_file="/etc/cron.d/easy-singbox-traffic"
+    local cron_file="/etc/cron.d/easysingbox-traffic"
 
     # Always rewrite to ensure correctness (idempotent)
     cat > "$cron_file" <<EOF
@@ -257,6 +257,8 @@ show_monthly_traffic() {
         local total=$((up + down))
         printf "%-12s %-15s %-15s %-15s\n" "$name" "$(format_bytes "$up")" "$(format_bytes "$down")" "$(format_bytes "$total")"
     done
+    echo ""
+    read -rp "按回车键继续..." _
 }
 
 show_total_traffic() {
@@ -275,6 +277,8 @@ show_total_traffic() {
         local total=$((up + down))
         printf "%-12s %-15s %-15s %-15s\n" "$name" "$(format_bytes "$up")" "$(format_bytes "$down")" "$(format_bytes "$total")"
     done
+    echo ""
+    read -rp "按回车键继续..." _
 }
 
 show_history_months() {
