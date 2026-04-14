@@ -77,6 +77,9 @@ install_vless_reality() {
     local api_port
     api_port=$(get_api_port "vless-reality")
 
+    local listen_addr
+    listen_addr=$(get_listen_address)
+
     jq -n \
         --argjson port "$VLESS_REALITY_PORT" \
         --arg dest "$VLESS_REALITY_DEST" \
@@ -84,12 +87,13 @@ install_vless_reality() {
         --arg short_id "$short_id" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
             inbounds: [{
                 type: "vless",
                 tag: "vless-reality",
-                listen: "::",
+                listen: $listen_addr,
                 listen_port: $port,
                 users: $users,
                 tls: {

@@ -35,6 +35,22 @@ get_package_manager() {
     esac
 }
 
+# ─── Network Detection ─────────────────────────────────────────────────────
+
+# Detect whether IPv6 is available on this system.
+# Returns "::" for dual-stack (IPv6 enabled) or "0.0.0.0" for IPv4-only.
+get_listen_address() {
+    if [[ -f /proc/sys/net/ipv6/conf/all/disable_ipv6 ]]; then
+        local disabled
+        disabled=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
+        if [[ "$disabled" == "0" ]]; then
+            echo "::"
+            return
+        fi
+    fi
+    echo "0.0.0.0"
+}
+
 # ─── Utilities ────────────────────────────────────────────────────────────
 
 gen_uuid() {

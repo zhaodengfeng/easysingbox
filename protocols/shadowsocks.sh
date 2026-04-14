@@ -36,18 +36,22 @@ install_shadowsocks() {
     local api_port
     api_port=$(get_api_port "shadowsocks")
 
+    local listen_addr
+    listen_addr=$(get_listen_address)
+
     jq -n \
         --argjson port "$SS_PORT" \
         --arg method "$SS_METHOD" \
         --arg server_pw "$server_password" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
             inbounds: [{
                 type: "shadowsocks",
                 tag: "shadowsocks",
-                listen: "::",
+                listen: $listen_addr,
                 listen_port: $port,
                 method: $method,
                 password: $server_pw,

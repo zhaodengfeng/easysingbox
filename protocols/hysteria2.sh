@@ -145,6 +145,9 @@ install_hysteria2() {
     local api_port
     api_port=$(get_api_port "hysteria2")
 
+    local listen_addr
+    listen_addr=$(get_listen_address)
+
     jq -n \
         --argjson port "$HY2_PORT" \
         --arg domain "$HY2_DOMAIN" \
@@ -152,12 +155,13 @@ install_hysteria2() {
         --arg key "${TLS_DIR}/${HY2_DOMAIN}.key" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
             inbounds: [{
                 type: "hysteria2",
                 tag: "hysteria2",
-                listen: "::",
+                listen: $listen_addr,
                 listen_port: $port,
                 users: $users,
                 tls: {

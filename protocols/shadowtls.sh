@@ -30,6 +30,9 @@ install_shadowtls() {
     local api_port
     api_port=$(get_api_port "shadowtls")
 
+    local listen_addr
+    listen_addr=$(get_listen_address)
+
     jq -n \
         --argjson port "$SHADOWTLS_PORT" \
         --arg domain "$SHADOWTLS_DOMAIN" \
@@ -40,13 +43,14 @@ install_shadowtls() {
         --arg key "${TLS_DIR}/${SHADOWTLS_DOMAIN}.key" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
             inbounds: [
                 {
                     type: "shadowtls",
                     tag: "shadowtls",
-                    listen: "::",
+                    listen: $listen_addr,
                     listen_port: $port,
                     detour: "shadowsocks-in",
                     users: [{ password: $st_pass }],

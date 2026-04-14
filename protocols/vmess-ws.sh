@@ -31,6 +31,9 @@ install_vmess_ws() {
     local api_port
     api_port=$(get_api_port "vmess-ws")
 
+    local listen_addr
+    listen_addr=$(get_listen_address)
+
     jq -n \
         --argjson port "$VMESS_WS_PORT" \
         --arg domain "$VMESS_WS_DOMAIN" \
@@ -39,12 +42,13 @@ install_vmess_ws() {
         --arg key "${TLS_DIR}/${VMESS_WS_DOMAIN}.key" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
             inbounds: [{
                 type: "vmess",
                 tag: "vmess-ws",
-                listen: "::",
+                listen: $listen_addr,
                 listen_port: $port,
                 users: $users,
                 tls: {

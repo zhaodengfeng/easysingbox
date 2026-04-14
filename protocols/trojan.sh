@@ -28,6 +28,9 @@ install_trojan() {
     local api_port
     api_port=$(get_api_port "trojan")
 
+    local listen_addr
+    listen_addr=$(get_listen_address)
+
     jq -n \
         --argjson port "$TROJAN_PORT" \
         --arg domain "$TROJAN_DOMAIN" \
@@ -35,12 +38,13 @@ install_trojan() {
         --arg key "${TLS_DIR}/${TROJAN_DOMAIN}.key" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
             inbounds: [{
                 type: "trojan",
                 tag: "trojan",
-                listen: "::",
+                listen: $listen_addr,
                 listen_port: $port,
                 users: $users,
                 tls: {

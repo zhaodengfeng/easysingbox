@@ -31,6 +31,9 @@ install_vless_grpc() {
     local api_port
     api_port=$(get_api_port "vless-grpc")
 
+    local listen_addr
+    listen_addr=$(get_listen_address)
+
     jq -n \
         --argjson port "$VLESS_GRPC_PORT" \
         --arg domain "$VLESS_GRPC_DOMAIN" \
@@ -39,12 +42,13 @@ install_vless_grpc() {
         --arg key "${TLS_DIR}/${VLESS_GRPC_DOMAIN}.key" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
             inbounds: [{
                 type: "vless",
                 tag: "vless-grpc",
-                listen: "::",
+                listen: $listen_addr,
                 listen_port: $port,
                 users: $users,
                 tls: {

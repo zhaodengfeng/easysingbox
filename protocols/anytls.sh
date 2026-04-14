@@ -28,6 +28,9 @@ install_anytls() {
     local api_port
     api_port=$(get_api_port "anytls")
 
+    local listen_addr
+    listen_addr=$(get_listen_address)
+
     jq -n \
         --argjson port "$ANYTLS_PORT" \
         --arg domain "$ANYTLS_DOMAIN" \
@@ -35,12 +38,13 @@ install_anytls() {
         --arg key "${TLS_DIR}/${ANYTLS_DOMAIN}.key" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
             inbounds: [{
                 type: "anytls",
                 tag: "anytls",
-                listen: "::",
+                listen: $listen_addr,
                 listen_port: $port,
                 users: $users,
                 tls: {

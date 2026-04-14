@@ -33,6 +33,9 @@ install_tuic() {
     local api_port
     api_port=$(get_api_port "tuic")
 
+    local listen_addr
+    listen_addr=$(get_listen_address)
+
     jq -n \
         --argjson port "$TUIC_PORT" \
         --arg domain "$TUIC_DOMAIN" \
@@ -40,12 +43,13 @@ install_tuic() {
         --arg key "${TLS_DIR}/${TUIC_DOMAIN}.key" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
             inbounds: [{
                 type: "tuic",
                 tag: "tuic",
-                listen: "::",
+                listen: $listen_addr,
                 listen_port: $port,
                 users: $users,
                 tls: {
