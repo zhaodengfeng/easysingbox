@@ -72,9 +72,12 @@ install_tuic() {
     wait_service_start "tuic" 10
     set_protocol_state "tuic" "$TUIC_PORT" "running" "$TUIC_DOMAIN"
 
-    ensure_default_user "tuic" "$uuid" "$password"
+    read -rp "请输入默认用户名 (留空为 default): " default_username
+    [[ -z "$default_username" ]] && default_username="default"
 
-    generate_share_link "tuic" "default"
+    ensure_default_user "tuic" "$uuid" "$password" "$default_username"
+
+    generate_share_link "tuic" "$default_username"
     setup_traffic_cron
 
     echo ""

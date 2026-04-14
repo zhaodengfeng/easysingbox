@@ -15,16 +15,18 @@ ensure_default_user() {
     local protocol="$1"
     local uuid="${2:-}"
     local password="${3:-}"
+    local username="${4:-default}"
 
     init_users
 
-    if jq -e --arg name "default" '.users[] | select(.name == $name)' "$USERS_FILE" &>/dev/null; then
+    if jq -e --arg name "$username" '.users[] | select(.name == $name)' "$USERS_FILE" &>/dev/null; then
         # User exists: add protocol and update appropriate credentials
         # (credentials are per-protocol; rebuild below syncs them to inbound.json)
-        jq --arg proto "$protocol" \
+        jq --arg name "$username" \
+           --arg proto "$protocol" \
            --arg uuid "$uuid" \
            --arg password "$password" \
-           '(.users[] | select(.name == "default")) |= (
+           '(.users[] | select(.name == $name)) |= (
                .protocols = ([.protocols[], $proto] | unique) |
                if $uuid != "" then .uuid = $uuid else . end |
                if $password != "" then .password = $password else . end
@@ -36,12 +38,13 @@ ensure_default_user() {
         now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
         local user_json
         user_json=$(jq -n \
+            --arg name "$username" \
             --arg proto "$protocol" \
             --arg uuid "$uuid" \
             --arg password "$password" \
             --arg created_at "$now" \
             '{
-                name: "default",
+                name: $name,
                 uuid: (if $uuid == "" then null else $uuid end),
                 password: (if $password == "" then null else $password end),
                 protocols: [$proto],

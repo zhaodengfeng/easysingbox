@@ -73,9 +73,12 @@ install_vless_grpc() {
     wait_service_start "vless-grpc" 10
     set_protocol_state "vless-grpc" "$VLESS_GRPC_PORT" "running" "$VLESS_GRPC_DOMAIN"
 
-    ensure_default_user "vless-grpc" "$uuid" ""
+    read -rp "请输入默认用户名 (留空为 default): " default_username
+    [[ -z "$default_username" ]] && default_username="default"
 
-    generate_share_link "vless-grpc" "default"
+    ensure_default_user "vless-grpc" "$uuid" "" "$default_username"
+
+    generate_share_link "vless-grpc" "$default_username"
     setup_traffic_cron
 
     echo ""

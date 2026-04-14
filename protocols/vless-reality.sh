@@ -128,10 +128,13 @@ install_vless_reality() {
         "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
 
     # Add default user to users.json
-    ensure_default_user "vless-reality" "$uuid" ""
+    read -rp "请输入默认用户名 (留空为 default): " default_username
+    [[ -z "$default_username" ]] && default_username="default"
+
+    ensure_default_user "vless-reality" "$uuid" "" "$default_username"
 
     # Generate share link
-    generate_share_link "vless-reality" "default"
+    generate_share_link "vless-reality" "$default_username"
 
     # Setup traffic cron
     setup_traffic_cron

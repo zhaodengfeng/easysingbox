@@ -171,7 +171,7 @@ protocol_control_menu() {
             i=$((i + 1))
         done <<< "$protocols"
         echo ""
-        echo "快速操作: [编号][s]启停 [r]重启 [q]链接 [u]卸载  或只输编号进菜单  (0 返回)"
+        echo "快捷操作: 1s启停  1r重启  1i信息  1q链接  1u卸载  |  只输编号进入完整菜单  |  0返回"
         read -rp "选择: " action
 
         action=$(echo "$action" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
@@ -204,6 +204,9 @@ protocol_control_menu() {
                 echo "已重启 $protocol"
                 sleep 1
                 ;;
+            i)
+                view_protocol_info "$protocol"
+                ;;
             q)
                 view_share_link_for_protocol "$protocol"
                 ;;
@@ -235,6 +238,7 @@ protocol_action_menu() {
         echo ""
         echo "  [s]  启动/停止"
         echo "  [r]  重启"
+        echo "  [i]  查看配置信息"
         echo "  [q]  分享链接/二维码"
         echo "  [u]  卸载"
         echo "  [0]  返回"
@@ -253,6 +257,7 @@ protocol_action_menu() {
                 sleep 1
                 ;;
             r) restart_service "$protocol"; echo "已重启 $protocol"; sleep 1 ;;
+            i) view_protocol_info "$protocol" ;;
             q) view_share_link_for_protocol "$protocol" ;;
             u) do_uninstall_protocol "$protocol"; return ;;
             0|*) return ;;
@@ -283,6 +288,61 @@ view_share_link_for_protocol() {
         done
     fi
     [[ "$found" == "0" ]] && echo "暂无分享链接"
+    echo ""
+    read -rp "按回车键继续..." _
+}
+
+view_protocol_info() {
+    local protocol="$1"
+    clear
+    echo "=== $protocol 配置信息 ==="
+    echo ""
+
+    local port status domain
+    port=$(jq -r ".protocols[\"$protocol\"].port // \"-\"" "$STATE_FILE")
+    status=$(jq -r ".protocols[\"$protocol\"].status // \"-\"" "$STATE_FILE")
+    domain=$(jq -r ".protocols[\"$protocol\"].domain // \"-\"" "$STATE_FILE")
+
+    echo "端口:   $port"
+    echo "状态:   $status"
+    [[ "$domain" != "-" && "$domain" != "null" && -n "$domain" ]] && echo "域名:   $domain"
+
+    # Protocol-specific fields from state
+    case "$protocol" in
+        vless-reality)
+            echo "SNI:        $(jq -r '.protocols["vless-reality"].dest // "-"' "$STATE_FILE")"
+            echo "Public Key: $(jq -r '.protocols["vless-reality"].public_key // "-"' "$STATE_FILE")"
+            echo "Short ID:   $(jq -r '.protocols["vless-reality"].short_id // "-"' "$STATE_FILE")"
+            ;;
+        vless-ws)
+            echo "路径: $(jq -r '.protocols["vless-ws"].path // "-"' "$STATE_FILE")"
+            ;;
+        vless-grpc)
+            echo "Service Name: $(jq -r '.protocols["vless-grpc"].service_name // "-"' "$STATE_FILE")"
+            ;;
+        vmess-ws)
+            echo "路径: $(jq -r '.protocols["vmess-ws"].path // "-"' "$STATE_FILE")"
+            ;;
+        hysteria2)
+            local hp_start hp_end
+            hp_start=$(jq -r '.protocols["hysteria2"].hop_start // empty' "$STATE_FILE")
+            hp_end=$(jq -r '.protocols["hysteria2"].hop_end // empty' "$STATE_FILE")
+            [[ -n "$hp_start" && -n "$hp_end" ]] && echo "端口跳跃: $hp_start-$hp_end"
+            ;;
+        shadowtls)
+            echo "ShadowTLS 版本: $(jq -r '.protocols["shadowtls"].version // "-"' "$STATE_FILE")"
+            ;;
+    esac
+
+    echo ""
+    echo "用户凭证:"
+    if jq -e --arg proto "$protocol" '.users[] | select(.protocols[] == $proto)' "$USERS_FILE" &>/dev/null; then
+        jq -r --arg proto "$protocol" \
+            '.users[] | select(.protocols[] == $proto) | "  \(.name): UUID=\(.uuid // \"-\") 密码=\(.password // \"-\")"' \
+            "$USERS_FILE"
+    else
+        echo "  暂无用户"
+    fi
     echo ""
     read -rp "按回车键继续..." _
 }

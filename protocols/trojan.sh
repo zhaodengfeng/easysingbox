@@ -65,9 +65,12 @@ install_trojan() {
     wait_service_start "trojan" 10
     set_protocol_state "trojan" "$TROJAN_PORT" "running" "$TROJAN_DOMAIN"
 
-    ensure_default_user "trojan" "" "$password"
+    read -rp "请输入默认用户名 (留空为 default): " default_username
+    [[ -z "$default_username" ]] && default_username="default"
 
-    generate_share_link "trojan" "default"
+    ensure_default_user "trojan" "" "$password" "$default_username"
+
+    generate_share_link "trojan" "$default_username"
     setup_traffic_cron
 
     echo ""

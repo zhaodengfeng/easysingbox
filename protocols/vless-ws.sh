@@ -73,9 +73,12 @@ install_vless_ws() {
     wait_service_start "vless-ws" 10
     set_protocol_state "vless-ws" "$VLESS_WS_PORT" "running" "$VLESS_WS_DOMAIN"
 
-    ensure_default_user "vless-ws" "$uuid" ""
+    read -rp "请输入默认用户名 (留空为 default): " default_username
+    [[ -z "$default_username" ]] && default_username="default"
 
-    generate_share_link "vless-ws" "default"
+    ensure_default_user "vless-ws" "$uuid" "" "$default_username"
+
+    generate_share_link "vless-ws" "$default_username"
     setup_traffic_cron
 
     local server_ip

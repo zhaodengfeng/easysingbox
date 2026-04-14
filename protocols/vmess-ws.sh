@@ -73,9 +73,12 @@ install_vmess_ws() {
     wait_service_start "vmess-ws" 10
     set_protocol_state "vmess-ws" "$VMESS_WS_PORT" "running" "$VMESS_WS_DOMAIN"
 
-    ensure_default_user "vmess-ws" "$uuid" ""
+    read -rp "请输入默认用户名 (留空为 default): " default_username
+    [[ -z "$default_username" ]] && default_username="default"
 
-    generate_share_link "vmess-ws" "default"
+    ensure_default_user "vmess-ws" "$uuid" "" "$default_username"
+
+    generate_share_link "vmess-ws" "$default_username"
     setup_traffic_cron
 
     echo ""

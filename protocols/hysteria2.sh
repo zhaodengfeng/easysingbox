@@ -195,9 +195,12 @@ install_hysteria2() {
             "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
     fi
 
-    ensure_default_user "hysteria2" "" "$password"
+    read -rp "请输入默认用户名 (留空为 default): " default_username
+    [[ -z "$default_username" ]] && default_username="default"
 
-    generate_share_link "hysteria2" "default"
+    ensure_default_user "hysteria2" "" "$password" "$default_username"
+
+    generate_share_link "hysteria2" "$default_username"
     setup_traffic_cron
 
     echo ""

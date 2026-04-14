@@ -68,9 +68,12 @@ install_shadowsocks() {
     wait_service_start "shadowsocks" 10
     set_protocol_state "shadowsocks" "$SS_PORT" "running"
 
-    ensure_default_user "shadowsocks" "" "$user_password"
+    read -rp "请输入默认用户名 (留空为 default): " default_username
+    [[ -z "$default_username" ]] && default_username="default"
 
-    generate_share_link "shadowsocks" "default"
+    ensure_default_user "shadowsocks" "" "$user_password" "$default_username"
+
+    generate_share_link "shadowsocks" "$default_username"
     setup_traffic_cron
 
     local server_ip

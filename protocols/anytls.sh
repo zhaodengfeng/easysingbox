@@ -65,9 +65,12 @@ install_anytls() {
     wait_service_start "anytls" 10
     set_protocol_state "anytls" "$ANYTLS_PORT" "running" "$ANYTLS_DOMAIN"
 
-    ensure_default_user "anytls" "" "$password"
+    read -rp "请输入默认用户名 (留空为 default): " default_username
+    [[ -z "$default_username" ]] && default_username="default"
 
-    generate_share_link "anytls" "default"
+    ensure_default_user "anytls" "" "$password" "$default_username"
+
+    generate_share_link "anytls" "$default_username"
     setup_traffic_cron
 
     echo ""

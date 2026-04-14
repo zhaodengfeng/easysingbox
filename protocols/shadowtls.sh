@@ -83,9 +83,12 @@ install_shadowtls() {
     wait_service_start "shadowtls" 10
     set_protocol_state "shadowtls" "$SHADOWTLS_PORT" "running" "$SHADOWTLS_DOMAIN"
 
-    ensure_default_user "shadowtls" "" "$ss_password"
+    read -rp "请输入默认用户名 (留空为 default): " default_username
+    [[ -z "$default_username" ]] && default_username="default"
 
-    generate_share_link "shadowtls" "default"
+    ensure_default_user "shadowtls" "" "$ss_password" "$default_username"
+
+    generate_share_link "shadowtls" "$default_username"
     setup_traffic_cron
 
     local server_ip
