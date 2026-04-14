@@ -6,7 +6,7 @@ set -euo pipefail
 # 用法 2: git clone 后 sudo bash install.sh
 
 readonly TARGET_DIR="/opt/easysingbox"
-readonly INSTALLER_VERSION="0.2.1"
+readonly INSTALLER_VERSION="0.2.2"
 REPO_URL="https://raw.githubusercontent.com/zhaodengfeng/easysingbox/main"
 
 # ─── Colors ───────────────────────────────────────────────────────────────
@@ -156,7 +156,7 @@ fi
 # ─── Step 3: Install Files ────────────────────────────────────────────────
 
 echo ""
-info "正在安装 easy-sing-box 到 $TARGET_DIR ..."
+info "正在安装 EasySingBox 到 $TARGET_DIR ..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 USE_LOCAL=false

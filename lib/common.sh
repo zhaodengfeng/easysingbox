@@ -377,7 +377,7 @@ write_service() {
 
     cat > "$service_file" <<EOF
 [Unit]
-Description=easy-sing-box - ${protocol}
+Description=EasySingBox - ${protocol}
 After=network-online.target
 Wants=network-online.target
 

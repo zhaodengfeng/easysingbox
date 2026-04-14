@@ -1,4 +1,4 @@
-# easy-sing-box
+# EasySingBox
 
 sing-box 代理协议一键部署脚本，支持 10 种协议、多用户管理、流量统计与限额管控。
 
@@ -52,7 +52,7 @@ sudo easysingbox
 ## 管理菜单
 
 ```
-easy-sing-box v0.2.1
+EasySingBox v0.2.2"
 
 ┌─────────────────────────────────────┐
 │  【1】安装协议                      │
