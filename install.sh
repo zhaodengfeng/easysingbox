@@ -24,7 +24,7 @@ error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # ─── Header ───────────────────────────────────────────────────────────────
 
-echo "easy-sing-box 一键安装 v${INSTALLER_VERSION}"
+echo "EasySingBox 一键安装 v${INSTALLER_VERSION}"
 echo ""
 
 if [[ $EUID -ne 0 ]]; then
