@@ -82,7 +82,7 @@ print_main_menu() {
     echo ""
     echo "┌─────────────────────────────────────┐"
     echo "│  【1】安装协议                      │"
-    echo "│  【2】协议控制                      │"
+    echo "│  【2】服务状况                      │"
     echo "│  【3】用户管理                      │"
     echo "│  【4】流量统计                      │"
     echo "│  【5】系统管理                      │"
@@ -137,7 +137,23 @@ print_install_protocol_menu() {
     echo ""
 }
 
-# ─── Protocol Control Menu ─────────────────────────────────────
+# ─── Service Status Menu ─────────────────────────────────────
+
+# Get human-readable status from actual systemctl
+get_real_status() {
+    local protocol="$1"
+    local service_name
+    service_name=$(get_service_name "$protocol")
+    local raw
+    raw=$(systemctl is-active "$service_name" 2>/dev/null || echo "inactive")
+    case "$raw" in
+        active)        echo "运行中" ;;
+        activating)    echo "启动中" ;;
+        inactive)      echo "已停止" ;;
+        failed)        echo "异常" ;;
+        *)             echo "未知" ;;
+    esac
+}
 
 protocol_control_menu() {
     while true; do
@@ -159,68 +175,43 @@ protocol_control_menu() {
         local singbox_version
         singbox_version=$(jq -r '.version // "unknown"' "$STATE_FILE")
 
-        echo "=== 协议控制 (sing-box $singbox_version) ==="
+        echo "=== 服务状况 (sing-box $singbox_version) ==="
         echo ""
+        printf " %-3s %-18s %-6s %-8s %s\n" "#" "协议" "端口" "状态" "域名"
+        printf " %-3s %-18s %-6s %-8s %s\n" "---" "----" "----" "----" "----"
         local i=1
         while IFS= read -r proto; do
-            local port status domain
+            local port domain real_status
             port=$(jq -r ".protocols[\"$proto\"].port // \"-\"" "$STATE_FILE")
-            status=$(jq -r ".protocols[\"$proto\"].status // \"-\"" "$STATE_FILE")
             domain=$(jq -r ".protocols[\"$proto\"].domain // \"-\"" "$STATE_FILE")
-            printf " %2d. %-18s 端口:%-6s 状态:%-8s 域名:%s\n" "$i" "$proto" "$port" "$status" "$domain"
+            real_status=$(get_real_status "$proto")
+            printf " %-3s %-18s %-6s %-8s %s\n" "$i" "$proto" "$port" "$real_status" "$domain"
             i=$((i + 1))
         done <<< "$protocols"
         echo ""
-        echo "快捷操作: 1s启停  1r重启  1i信息  1q链接  1u卸载  |  只输编号进入完整菜单  |  0返回"
-        read -rp "选择: " action
+        echo "输入编号进入协议管理  |  0 返回"
+        read -rp "选择: " choice
 
-        action=$(echo "$action" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
-        [[ "$action" == "0" ]] && return
+        # Strip spaces and convert to lowercase
+        choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+        [[ "$choice" == "0" || -z "$choice" ]] && return
 
-        local idx cmd protocol
-        idx=$(echo "$action" | sed 's/[^0-9]//g')
-        cmd=$(echo "$action" | sed 's/[0-9]//g')
+        # Must be a pure number
+        if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+            echo "无效选择"
+            sleep 1
+            continue
+        fi
 
-        protocol=$(echo "$protocols" | sed -n "${idx}p")
+        local protocol
+        protocol=$(echo "$protocols" | sed -n "${choice}p")
         if [[ -z "$protocol" ]]; then
             echo "无效选择"
             sleep 1
             continue
         fi
 
-        case "$cmd" in
-            s)
-                if systemctl is-active --quiet "$(get_service_name "$protocol")"; then
-                    stop_service "$protocol"
-                    echo "已停止 $protocol"
-                else
-                    start_service "$protocol"
-                    echo "已启动 $protocol"
-                fi
-                sleep 1
-                ;;
-            r)
-                restart_service "$protocol"
-                echo "已重启 $protocol"
-                sleep 1
-                ;;
-            i)
-                view_protocol_info "$protocol"
-                ;;
-            q)
-                view_share_link_for_protocol "$protocol"
-                ;;
-            u)
-                do_uninstall_protocol "$protocol"
-                ;;
-            "")
-                protocol_action_menu "$protocol"
-                ;;
-            *)
-                echo "无效操作: $cmd"
-                sleep 1
-                ;;
-        esac
+        protocol_action_menu "$protocol"
     done
 }
 
@@ -228,27 +219,26 @@ protocol_action_menu() {
     local protocol="$1"
     while true; do
         clear
-        local port status domain
+        local port domain real_status
         port=$(jq -r ".protocols[\"$protocol\"].port // \"-\"" "$STATE_FILE")
-        status=$(jq -r ".protocols[\"$protocol\"].status // \"-\"" "$STATE_FILE")
         domain=$(jq -r ".protocols[\"$protocol\"].domain // \"-\"" "$STATE_FILE")
+        real_status=$(get_real_status "$protocol")
 
-        echo "┌────────── $protocol ──────────┐"
-        echo "  端口: $port  状态: $status  域名: $domain"
+        echo "=== $protocol ==="
+        echo "  端口: $port  状态: $real_status  域名: $domain"
         echo ""
-        echo "  [s]  启动/停止"
-        echo "  [r]  重启"
-        echo "  [i]  查看配置信息"
-        echo "  [q]  分享链接/二维码"
-        echo "  [u]  卸载"
-        echo "  [0]  返回"
-        echo "└───────────────────────────────────┘"
+        echo "  1. 启动/停止"
+        echo "  2. 重启"
+        echo "  3. 查看配置信息"
+        echo "  4. 分享链接/二维码"
+        echo "  5. 卸载"
         echo ""
-        read -rp "选择: " action
-        action=$(echo "$action" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+        echo "  0. 返回"
+        echo ""
+        read -rp "选择 [0-5]: " action
 
         case "$action" in
-            s)
+            1)
                 if systemctl is-active --quiet "$(get_service_name "$protocol")"; then
                     stop_service "$protocol"; echo "已停止 $protocol"
                 else
@@ -256,10 +246,10 @@ protocol_action_menu() {
                 fi
                 sleep 1
                 ;;
-            r) restart_service "$protocol"; echo "已重启 $protocol"; sleep 1 ;;
-            i) view_protocol_info "$protocol" ;;
-            q) view_share_link_for_protocol "$protocol" ;;
-            u) do_uninstall_protocol "$protocol"; return ;;
+            2) restart_service "$protocol"; echo "已重启 $protocol"; sleep 1 ;;
+            3) view_protocol_info "$protocol" ;;
+            4) view_share_link_for_protocol "$protocol" ;;
+            5) do_uninstall_protocol "$protocol"; return ;;
             0|*) return ;;
         esac
     done
@@ -298,13 +288,13 @@ view_protocol_info() {
     echo "=== $protocol 配置信息 ==="
     echo ""
 
-    local port status domain
+    local port domain real_status
     port=$(jq -r ".protocols[\"$protocol\"].port // \"-\"" "$STATE_FILE")
-    status=$(jq -r ".protocols[\"$protocol\"].status // \"-\"" "$STATE_FILE")
+    real_status=$(get_real_status "$protocol")
     domain=$(jq -r ".protocols[\"$protocol\"].domain // \"-\"" "$STATE_FILE")
 
     echo "端口:   $port"
-    echo "状态:   $status"
+    echo "状态:   $real_status"
     [[ "$domain" != "-" && "$domain" != "null" && -n "$domain" ]] && echo "域名:   $domain"
 
     # Protocol-specific fields from state
@@ -600,10 +590,15 @@ show_all_status() {
     printf "%-20s %-8s %-8s %-10s\n" "协议" "端口" "状态" "域名"
     printf "%-20s %-8s %-8s %-10s\n" "----" "----" "----" "----"
 
-    jq -r '.protocols | to_entries[] | "\(.key)|\(.value.port)|\(.value.status)|\(.value.domain // "-")"' "$STATE_FILE" | \
-    while IFS='|' read -r proto port status domain; do
-        printf "%-20s %-8s %-8s %-10s\n" "$proto" "$port" "$status" "$domain"
-    done
+    local protocols
+    protocols=$(jq -r '.protocols | keys[]' "$STATE_FILE" 2>/dev/null)
+    while IFS= read -r proto; do
+        local port domain real_status
+        port=$(jq -r ".protocols[\"$proto\"].port // \"-\"" "$STATE_FILE")
+        domain=$(jq -r ".protocols[\"$proto\"].domain // \"-\"" "$STATE_FILE")
+        real_status=$(get_real_status "$proto")
+        printf "%-20s %-8s %-8s %-10s\n" "$proto" "$port" "$real_status" "$domain"
+    done <<< "$protocols"
     echo ""
     read -rp "按回车键继续..." _
 }
