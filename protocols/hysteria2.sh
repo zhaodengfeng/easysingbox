@@ -185,7 +185,9 @@ install_hysteria2() {
 
     write_service "hysteria2"
     start_service "hysteria2"
-    wait_service_start "hysteria2" 10
+    if ! wait_service_start "hysteria2" 10; then
+        echo "警告: Hysteria 2 服务启动失败，请使用 journalctl -u singbox-hysteria2 -n 50 查看日志"
+    fi
     set_protocol_state "hysteria2" "$HY2_PORT" "running" "$HY2_DOMAIN"
 
     # Store hop config in state.json
@@ -199,6 +201,10 @@ install_hysteria2() {
     [[ -z "$default_username" ]] && default_username="default"
 
     ensure_default_user "hysteria2" "" "$password" "$default_username"
+
+    if [[ "$(check_service_status "hysteria2")" != "active" ]]; then
+        echo "警告: Hysteria 2 服务当前未运行，请使用 journalctl -u singbox-hysteria2 -n 50 查看日志"
+    fi
 
     generate_share_link "hysteria2" "$default_username"
     setup_traffic_cron

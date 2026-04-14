@@ -275,6 +275,7 @@ request_acme_cert() {
             --key-file "${TLS_DIR}/${domain}.key" \
             --fullchain-file "${TLS_DIR}/${domain}.crt" 2>&1 || true
         if [[ -f "${TLS_DIR}/${domain}.crt" ]]; then
+            chmod 644 "${TLS_DIR}/${domain}.crt" "${TLS_DIR}/${domain}.key"
             echo "证书申请成功"
             return 0
         fi
@@ -314,6 +315,7 @@ use_existing_certificate() {
         mkdir -p "$TLS_DIR"
         cp "$cert_path" "${TLS_DIR}/${domain}.crt"
         cp "$key_path" "${TLS_DIR}/${domain}.key"
+        chmod 644 "${TLS_DIR}/${domain}.crt" "${TLS_DIR}/${domain}.key"
         echo "证书已复制到 ${TLS_DIR}/${domain}.{crt,key}"
         return 0
     fi

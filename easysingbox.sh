@@ -336,9 +336,9 @@ view_protocol_info() {
 
     echo ""
     echo "用户凭证:"
-    if jq -e --arg proto "$protocol" '.users[] | select(.protocols[] == $proto)' "$USERS_FILE" &>/dev/null; then
+    if jq -e --arg proto "$protocol" '.users[] | select(.protocols | index($proto))' "$USERS_FILE" &>/dev/null; then
         jq -r --arg proto "$protocol" \
-            '.users[] | select(.protocols[] == $proto) | "  \(.name): UUID=\(.uuid // \"-\") 密码=\(.password // \"-\")"' \
+            '.users[] | select(.protocols | index($proto)) | "  \(.name): UUID=\(.uuid // \"-\") 密码=\(.password // \"-\")"' \
             "$USERS_FILE"
     else
         echo "  暂无用户"
