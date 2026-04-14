@@ -219,23 +219,95 @@ protocol_action_menu() {
     local protocol="$1"
     while true; do
         clear
+
         local port domain real_status
         port=$(jq -r ".protocols[\"$protocol\"].port // \"-\"" "$STATE_FILE")
         domain=$(jq -r ".protocols[\"$protocol\"].domain // \"-\"" "$STATE_FILE")
         real_status=$(get_real_status "$protocol")
 
         echo "=== $protocol ==="
-        echo "  端口: $port  状态: $real_status  域名: $domain"
+        echo "  端口: $port  状态: $real_status"
+        [[ "$domain" != "-" && "$domain" != "null" && -n "$domain" ]] && echo "  域名: $domain"
+
+        # Protocol-specific fields (read from inbound.json config)
+        local config_file="${CONFIG_DIR}/${protocol}/inbound.json"
+        case "$protocol" in
+            vless-reality)
+                [[ -f "$config_file" ]] && {
+                    echo "  SNI: $(jq -r '.inbounds[0].tls.reality.handshake.server // "-"' "$config_file")"
+                    echo "  Public Key: $(jq -r '.protocols["vless-reality"].public_key // "-"' "$STATE_FILE")"
+                    echo "  Short ID: $(jq -r '.inbounds[0].tls.reality.short_id[0] // "-"' "$config_file")"
+                }
+                ;;
+            vless-ws)
+                [[ -f "$config_file" ]] && echo "  路径: $(jq -r '.inbounds[0].transport.path // "-"' "$config_file")"
+                ;;
+            vless-grpc)
+                [[ -f "$config_file" ]] && echo "  Service Name: $(jq -r '.inbounds[0].transport.service_name // "-"' "$config_file")"
+                ;;
+            vmess-ws)
+                [[ -f "$config_file" ]] && echo "  路径: $(jq -r '.inbounds[0].transport.path // "-"' "$config_file")"
+                ;;
+            shadowsocks)
+                [[ -f "$config_file" ]] && echo "  加密: $(jq -r '.inbounds[0].method // "-"' "$config_file")"
+                ;;
+            hysteria2)
+                local hp_start hp_end
+                hp_start=$(jq -r '.protocols["hysteria2"].hop_start // empty' "$STATE_FILE")
+                hp_end=$(jq -r '.protocols["hysteria2"].hop_end // empty' "$STATE_FILE")
+                [[ -n "$hp_start" && -n "$hp_end" ]] && echo "  端口跳跃: $hp_start-$hp_end"
+                ;;
+        esac
+
+        # Per-user: credentials + share link + QR
         echo ""
+        if [[ -f "$USERS_FILE" ]] && jq -e --arg proto "$protocol" '(.users // [])[] | select(.protocols | index($proto))' "$USERS_FILE" &>/dev/null; then
+            local user_names
+            user_names=$(jq -r --arg proto "$protocol" '.users[] | select(.protocols | index($proto)) | .name' "$USERS_FILE")
+            while IFS= read -r username; do
+                echo "--- $username ---"
+                local uuid password
+                uuid=$(jq -r --arg proto "$protocol" --arg name "$username" '.users[] | select(.protocols | index($proto)) | select(.name == $name) | .uuid // empty' "$USERS_FILE")
+                password=$(jq -r --arg proto "$protocol" --arg name "$username" '.users[] | select(.protocols | index($proto)) | select(.name == $name) | .password // empty' "$USERS_FILE")
+                # Only show fields relevant to this protocol
+                case "$protocol" in
+                    vless-reality|vless-ws|vless-grpc|vmess-ws)
+                        [[ -n "$uuid" ]] && echo "  UUID: $uuid"
+                        ;;
+                    tuic)
+                        [[ -n "$uuid" ]] && echo "  UUID: $uuid"
+                        [[ -n "$password" ]] && echo "  密码: $password"
+                        ;;
+                    *)
+                        [[ -n "$password" ]] && echo "  密码: $password"
+                        ;;
+                esac
+                # Share link + QR
+                local share_file="${CONFIG_DIR}/${protocol}/share-link/${username}.txt"
+                if [[ -f "$share_file" ]]; then
+                    echo ""
+                    cat "$share_file"
+                    echo ""
+                    if command -v qrencode &>/dev/null; then
+                        qrencode -t ANSIUTF8 -s 3 -m 1 < "$share_file"
+                        echo ""
+                    fi
+                fi
+                echo ""
+            done <<< "$user_names"
+        else
+            echo "暂无用户"
+            echo ""
+        fi
+
+        echo "───────────────────────────────────"
         echo "  1. 启动/停止"
         echo "  2. 重启"
-        echo "  3. 查看配置信息"
-        echo "  4. 分享链接/二维码"
-        echo "  5. 卸载"
+        echo "  3. 卸载"
         echo ""
         echo "  0. 返回"
         echo ""
-        read -rp "选择 [0-5]: " action
+        read -rp "选择 [0-3]: " action
 
         case "$action" in
             1)
@@ -247,94 +319,10 @@ protocol_action_menu() {
                 sleep 1
                 ;;
             2) restart_service "$protocol"; echo "已重启 $protocol"; sleep 1 ;;
-            3) view_protocol_info "$protocol" ;;
-            4) view_share_link_for_protocol "$protocol" ;;
-            5) do_uninstall_protocol "$protocol"; return ;;
+            3) do_uninstall_protocol "$protocol"; return ;;
             0|*) return ;;
         esac
     done
-}
-
-view_share_link_for_protocol() {
-    local protocol="$1"
-    clear
-    echo "=== $protocol 分享链接 ==="
-    echo ""
-    local share_dir="${CONFIG_DIR}/${protocol}/share-link"
-    local found=0
-    if [[ -d "$share_dir" ]]; then
-        for f in "$share_dir"/*.txt; do
-            [[ -f "$f" ]] || continue
-            found=1
-            local username
-            username=$(basename "$f" .txt)
-            echo "--- $username ---"
-            cat "$f"
-            echo ""
-            if command -v qrencode &>/dev/null; then
-                qrencode -t ANSIUTF8 -s 3 -m 1 < "$f"
-                echo ""
-            fi
-        done
-    fi
-    [[ "$found" == "0" ]] && echo "暂无分享链接"
-    echo ""
-    read -rp "按回车键继续..." _
-}
-
-view_protocol_info() {
-    local protocol="$1"
-    clear
-    echo "=== $protocol 配置信息 ==="
-    echo ""
-
-    local port domain real_status
-    port=$(jq -r ".protocols[\"$protocol\"].port // \"-\"" "$STATE_FILE")
-    real_status=$(get_real_status "$protocol")
-    domain=$(jq -r ".protocols[\"$protocol\"].domain // \"-\"" "$STATE_FILE")
-
-    echo "端口:   $port"
-    echo "状态:   $real_status"
-    [[ "$domain" != "-" && "$domain" != "null" && -n "$domain" ]] && echo "域名:   $domain"
-
-    # Protocol-specific fields from state
-    case "$protocol" in
-        vless-reality)
-            echo "SNI:        $(jq -r '.protocols["vless-reality"].dest // "-"' "$STATE_FILE")"
-            echo "Public Key: $(jq -r '.protocols["vless-reality"].public_key // "-"' "$STATE_FILE")"
-            echo "Short ID:   $(jq -r '.protocols["vless-reality"].short_id // "-"' "$STATE_FILE")"
-            ;;
-        vless-ws)
-            echo "路径: $(jq -r '.protocols["vless-ws"].path // "-"' "$STATE_FILE")"
-            ;;
-        vless-grpc)
-            echo "Service Name: $(jq -r '.protocols["vless-grpc"].service_name // "-"' "$STATE_FILE")"
-            ;;
-        vmess-ws)
-            echo "路径: $(jq -r '.protocols["vmess-ws"].path // "-"' "$STATE_FILE")"
-            ;;
-        hysteria2)
-            local hp_start hp_end
-            hp_start=$(jq -r '.protocols["hysteria2"].hop_start // empty' "$STATE_FILE")
-            hp_end=$(jq -r '.protocols["hysteria2"].hop_end // empty' "$STATE_FILE")
-            [[ -n "$hp_start" && -n "$hp_end" ]] && echo "端口跳跃: $hp_start-$hp_end"
-            ;;
-        shadowtls)
-            echo "ShadowTLS 版本: $(jq -r '.protocols["shadowtls"].version // "-"' "$STATE_FILE")"
-            ;;
-    esac
-
-    echo ""
-    echo "用户凭证:"
-    if [[ -f "$USERS_FILE" ]] && jq -e --arg proto "$protocol" '(.users // [])[] | select(.protocols | index($proto))' "$USERS_FILE" &>/dev/null; then
-        jq -r --arg proto "$protocol" \
-            '(.users // [])[] | select(.protocols | index($proto)) | "  \(.name): UUID=\(.uuid // "-") 密码=\(.password // "-")"' \
-            "$USERS_FILE"
-    else
-        echo "  暂无用户"
-    fi
-    echo ""
-    read -rp "按回车键继续..." _
 }
 
 # ─── User Management Menu ───────────────────────────────────────
