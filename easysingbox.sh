@@ -130,7 +130,7 @@ print_install_protocol_menu() {
     echo "  7.  ShadowTLS + SS      (需域名+证书)"
     echo "  8.  Hysteria 2         (需域名+证书)"
     echo "  9.  TUIC v5            (需域名+证书)"
-    echo " 10. AnyTLS             (需域名+证书)"
+    echo " 10.  AnyTLS            (需域名+证书)"
     echo ""
     echo "  0.  返回主菜单"
     echo "└───────────────────────────────────┘"
