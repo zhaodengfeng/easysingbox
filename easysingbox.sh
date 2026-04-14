@@ -102,16 +102,16 @@ menu_install_protocol() {
         choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
 
         case "$choice" in
-            1)  install_protocol "vless-reality" ;;
-            2)  install_protocol "vless-ws" ;;
-            3)  install_protocol "vless-grpc" ;;
-            4)  install_protocol "vmess-ws" ;;
-            5)  install_protocol "trojan" ;;
-            6)  install_protocol "shadowsocks" ;;
-            7)  install_protocol "shadowtls" ;;
-            8)  install_protocol "hysteria2" ;;
-            9)  install_protocol "tuic" ;;
-            10) install_protocol "anytls" ;;
+            1)  install_protocol "vless-reality" ; read -rp "按回车键继续..." _ ;;
+            2)  install_protocol "vless-ws" ; read -rp "按回车键继续..." _ ;;
+            3)  install_protocol "vless-grpc" ; read -rp "按回车键继续..." _ ;;
+            4)  install_protocol "vmess-ws" ; read -rp "按回车键继续..." _ ;;
+            5)  install_protocol "trojan" ; read -rp "按回车键继续..." _ ;;
+            6)  install_protocol "shadowsocks" ; read -rp "按回车键继续..." _ ;;
+            7)  install_protocol "shadowtls" ; read -rp "按回车键继续..." _ ;;
+            8)  install_protocol "hysteria2" ; read -rp "按回车键继续..." _ ;;
+            9)  install_protocol "tuic" ; read -rp "按回车键继续..." _ ;;
+            10) install_protocol "anytls" ; read -rp "按回车键继续..." _ ;;
             0|*) return ;;
         esac
     done
