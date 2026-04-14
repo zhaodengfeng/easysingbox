@@ -168,6 +168,9 @@ ensure_singbox_installed() {
         install_singbox
     fi
 
+    # Ensure IPv6 kernel support is enabled (sing-box route monitor requires AF_INET6)
+    ensure_ipv6
+
     # Check dependencies
     for cmd in jq openssl curl; do
         if ! command -v "$cmd" &>/dev/null; then

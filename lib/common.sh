@@ -51,6 +51,30 @@ get_listen_address() {
     echo "0.0.0.0"
 }
 
+# Ensure IPv6 kernel support is enabled.
+# sing-box's route monitor subscribes to both IPv4 and IPv6 netlink groups;
+# if IPv6 is disabled at the kernel level, the service crashes with
+# "address family not supported by protocol".
+# This only enables kernel AF_INET6 support — no actual IPv6 connectivity needed.
+ensure_ipv6() {
+    local ipv6_proc="/proc/sys/net/ipv6/conf/all/disable_ipv6"
+    if [[ -f "$ipv6_proc" ]]; then
+        local disabled
+        disabled=$(cat "$ipv6_proc" 2>/dev/null)
+        if [[ "$disabled" != "0" ]]; then
+            echo "检测到 IPv6 内核支持已禁用，正在启用 ..."
+            sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
+            # Persist across reboots
+            if ! grep -q 'net.ipv6.conf.all.disable_ipv6' /etc/sysctl.conf 2>/dev/null; then
+                echo "net.ipv6.conf.all.disable_ipv6 = 0" >> /etc/sysctl.conf
+            else
+                sed -i 's/net.ipv6.conf.all.disable_ipv6.*/net.ipv6.conf.all.disable_ipv6 = 0/' /etc/sysctl.conf
+            fi
+            echo "IPv6 内核支持已启用 (仅内核级别，无需 IPv6 网络连通)"
+        fi
+    fi
+}
+
 # ─── Utilities ────────────────────────────────────────────────────────────
 
 gen_uuid() {
