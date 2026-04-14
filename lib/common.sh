@@ -296,30 +296,22 @@ use_existing_certificate() {
     local domain="$1"
     local cert_path key_path
 
-    echo ""
-    echo "是否使用已有的证书文件？（跳过自动申请）"
-    echo "  适用场景：其他服务已为该域名申请证书"
-    echo ""
-    read -rp "使用已有证书？[y/N]: " use_existing
-    if [[ "$use_existing" =~ ^[Yy]$ ]]; then
-        read -rp "证书文件路径 (.crt/.pem): " cert_path
-        if [[ ! -f "$cert_path" ]]; then
-            echo "证书文件不存在: $cert_path"
-            return 1
-        fi
-        read -rp "私钥文件路径 (.key): " key_path
-        if [[ ! -f "$key_path" ]]; then
-            echo "私钥文件不存在: $key_path"
-            return 1
-        fi
-        mkdir -p "$TLS_DIR"
-        cp "$cert_path" "${TLS_DIR}/${domain}.crt"
-        cp "$key_path" "${TLS_DIR}/${domain}.key"
-        chmod 644 "${TLS_DIR}/${domain}.crt" "${TLS_DIR}/${domain}.key"
-        echo "证书已复制到 ${TLS_DIR}/${domain}.{crt,key}"
-        return 0
+    read -rp "证书文件路径 (.crt/.pem): " cert_path
+    if [[ ! -f "$cert_path" ]]; then
+        echo "证书文件不存在: $cert_path"
+        return 1
     fi
-    return 1
+    read -rp "私钥文件路径 (.key): " key_path
+    if [[ ! -f "$key_path" ]]; then
+        echo "私钥文件不存在: $key_path"
+        return 1
+    fi
+    mkdir -p "$TLS_DIR"
+    cp "$cert_path" "${TLS_DIR}/${domain}.crt"
+    cp "$key_path" "${TLS_DIR}/${domain}.key"
+    chmod 644 "${TLS_DIR}/${domain}.crt" "${TLS_DIR}/${domain}.key"
+    echo "证书已复制到 ${TLS_DIR}/${domain}.{crt,key}"
+    return 0
 }
 
 ensure_certificate() {
@@ -335,16 +327,33 @@ ensure_certificate() {
         return 0
     fi
 
-    # Ask if user wants to use existing certificate from another service
-    if use_existing_certificate "$domain"; then
-        return 0
+    # 1. Check if old certificate exists in easysingbox TLS_DIR
+    if [[ -f "${TLS_DIR}/${domain}.crt" ]] && [[ -f "${TLS_DIR}/${domain}.key" ]]; then
+        echo ""
+        echo "检测到 easysingbox 目录下有 ${domain} 的旧证书，是否直接使用？"
+        read -rp "使用旧证书？[y/N]: " use_old
+        if [[ "$use_old" =~ ^[Yy]$ ]]; then
+            return 0
+        fi
+        # User chose no, fall through to request new cert
+    else
+        # 2. No old cert in default dir, ask if user wants to specify another path
+        echo ""
+        echo "未在 easysingbox 目录找到 ${domain} 的证书"
+        read -rp "是否使用其他位置的已有证书？[y/N]: " use_other
+        if [[ "$use_other" =~ ^[Yy]$ ]]; then
+            if use_existing_certificate "$domain"; then
+                return 0
+            fi
+        fi
     fi
 
+    # 3. Request / renew certificate
     case "$status" in
         expiring|expired|mismatch)
-            echo "证书状态: $status，正在续签 ..."
+            echo "证书状态: $status，正在重新申请 ..."
             if ! request_acme_cert "$domain" "$email"; then
-                echo "续签失败"
+                echo "申请失败"
                 return 1
             fi
             return 0
