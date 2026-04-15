@@ -2,10 +2,7 @@
 # protocols/shadowtls.sh
 
 prompt_shadowtls() {
-    read -rp "请输入域名: " SHADOWTLS_DOMAIN
-    while ! validate_domain "$SHADOWTLS_DOMAIN"; do
-        read -rp "域名格式无效，请重新输入: " SHADOWTLS_DOMAIN
-    done
+    prompt_domain SHADOWTLS_DOMAIN "shadowtls"
 
     ensure_certificate "$SHADOWTLS_DOMAIN" || return 1
 

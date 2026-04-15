@@ -18,11 +18,7 @@ prompt_hysteria2() {
         HY2_PORT="${input_port:-8443}"
         HY2_EMAIL="$input_email"
     else
-        # Menu mode: one-command style, only domain is required
-        read -rp "请输入域名: " HY2_DOMAIN
-        while ! validate_domain "$HY2_DOMAIN"; do
-            read -rp "域名格式无效，请重新输入: " HY2_DOMAIN
-        done
+        prompt_domain HY2_DOMAIN "hysteria2"
         HY2_PORT=8443
         # Check if port is in use, if so pick a random available port
         if ! check_port_available "$HY2_PORT"; then

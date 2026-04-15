@@ -2,10 +2,7 @@
 # protocols/anytls.sh
 
 prompt_anytls() {
-    read -rp "请输入域名: " ANYTLS_DOMAIN
-    while ! validate_domain "$ANYTLS_DOMAIN"; do
-        read -rp "域名格式无效，请重新输入: " ANYTLS_DOMAIN
-    done
+    prompt_domain ANYTLS_DOMAIN "anytls"
 
     ensure_certificate "$ANYTLS_DOMAIN" || return 1
 

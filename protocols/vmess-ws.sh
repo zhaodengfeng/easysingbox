@@ -2,10 +2,7 @@
 # protocols/vmess-ws.sh
 
 prompt_vmess_ws() {
-    read -rp "请输入域名: " VMESS_WS_DOMAIN
-    while ! validate_domain "$VMESS_WS_DOMAIN"; do
-        read -rp "域名格式无效，请重新输入: " VMESS_WS_DOMAIN
-    done
+    prompt_domain VMESS_WS_DOMAIN "vmess-ws"
 
     ensure_certificate "$VMESS_WS_DOMAIN" || return 1
 

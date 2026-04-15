@@ -75,41 +75,59 @@ add_user() {
 
     # Check duplicate
     if jq -e --arg name "$username" '.users[] | select(.name == $name)' "$USERS_FILE" &>/dev/null; then
-        echo "用户 $username 已存在"
+        err "用户 $username 已存在"
         return
     fi
 
-    # Select protocols
+    # Select protocols — default: all installed
     local installed_protocols
     installed_protocols=$(jq -r '.protocols | keys[]' "$STATE_FILE" 2>/dev/null)
     if [[ -z "$installed_protocols" ]]; then
-        echo "尚未安装任何协议，请先安装协议后再添加用户"
+        err "尚未安装任何协议，请先安装协议后再添加用户"
         return
     fi
 
+    local proto_count
+    proto_count=$(echo "$installed_protocols" | wc -l | tr -d ' ')
+
+    local selected_protocols=()
+    echo ""
     echo "已安装的协议:"
     echo "$installed_protocols" | nl -w2 -s'. '
     echo ""
-    echo "请选择用户可用的协议（逗号分隔，如 1,3）: "
-    read -rp "选择: " proto_selection
 
-    local selected_protocols=()
-    IFS=',' read -ra indices <<< "$proto_selection"
-    local all_protocols
-    all_protocols=$(echo "$installed_protocols" | tr '\n' ' ')
-    local idx=0
-    for proto in $all_protocols; do
-        idx=$(( idx + 1 ))
-        for i in "${indices[@]}"; do
-            i=$(echo "$i" | tr -d ' ')
-            if [[ "$i" == "$idx" ]]; then
+    if [[ "$proto_count" -eq 1 ]]; then
+        # Only one protocol, auto-select
+        selected_protocols=("$installed_protocols")
+        info "自动选择唯一协议: ${selected_protocols[0]}"
+    else
+        echo -e "全部绑定？[${BOLD}Y${NC}/n] (或输入编号如 1,3):"
+        read -rp "选择: " proto_selection
+        proto_selection="${proto_selection:-Y}"
+
+        if [[ "$proto_selection" =~ ^[Yy]$ ]] || [[ -z "$proto_selection" ]]; then
+            while IFS= read -r proto; do
                 selected_protocols+=("$proto")
-            fi
-        done
-    done
+            done <<< "$installed_protocols"
+        else
+            IFS=',' read -ra indices <<< "$proto_selection"
+            local all_protocols
+            all_protocols=$(echo "$installed_protocols" | tr '\n' ' ')
+            local idx=0
+            for proto in $all_protocols; do
+                idx=$(( idx + 1 ))
+                for i in "${indices[@]}"; do
+                    i=$(echo "$i" | tr -d ' ')
+                    if [[ "$i" == "$idx" ]]; then
+                        selected_protocols+=("$proto")
+                    fi
+                done
+            done
+        fi
+    fi
 
     if [[ ${#selected_protocols[@]} -eq 0 ]]; then
-        echo "未选择任何协议"
+        err "未选择任何协议"
         return
     fi
 
@@ -132,25 +150,28 @@ add_user() {
         password=$(gen_password)
     fi
 
-    # Traffic limits
-    local monthly_limit=0 total_limit=0
+    # Traffic limits — simplified: ask only if needed
+    local monthly_limit=0 total_limit=0 reset_day=1
     echo ""
-    echo "设置流量限额（0 = 不限制）:"
-    echo "  注: 1 GB = 1024 MB (二进制单位)"
-    read -rp "月度流量限额 (GB, 默认 0): " monthly_input
-    monthly_input="${monthly_input:-0}"
-    if [[ "$monthly_input" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-        monthly_limit=$(awk -v val="$monthly_input" 'BEGIN {printf "%.0f", val * 1073741824}')
-    fi
+    echo -e "设置流量限额？[y/${BOLD}N${NC}]:"
+    read -rp "" need_limit
+    if [[ "$need_limit" =~ ^[Yy]$ ]]; then
+        echo "  注: 1 GB = 1024 MB (二进制单位)"
+        read -rp "月度流量限额 (GB, 默认 0 不限): " monthly_input
+        monthly_input="${monthly_input:-0}"
+        if [[ "$monthly_input" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+            monthly_limit=$(awk -v val="$monthly_input" 'BEGIN {printf "%.0f", val * 1073741824}')
+        fi
 
-    read -rp "总流量限额 (GB, 默认 0): " total_input
-    total_input="${total_input:-0}"
-    if [[ "$total_input" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-        total_limit=$(awk -v val="$total_input" 'BEGIN {printf "%.0f", val * 1073741824}')
-    fi
+        read -rp "总流量限额 (GB, 默认 0 不限): " total_input
+        total_input="${total_input:-0}"
+        if [[ "$total_input" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+            total_limit=$(awk -v val="$total_input" 'BEGIN {printf "%.0f", val * 1073741824}')
+        fi
 
-    read -rp "每月重置日 (1-28, 默认 1): " reset_day
-    reset_day="${reset_day:-1}"
+        read -rp "每月重置日 (1-28, 默认 1): " reset_day
+        reset_day="${reset_day:-1}"
+    fi
 
     # Build protocol list JSON
     local proto_json
@@ -193,10 +214,10 @@ add_user() {
     done
 
     echo ""
-    echo "用户 $username 添加成功！"
-    echo "UUID: ${uuid:--}"
-    echo "密码: ${password:--}"
-    echo "协议: $(IFS=', '; echo "${selected_protocols[*]}")"
+    ok "用户 $username 添加成功！"
+    echo "  UUID: ${uuid:--}"
+    echo "  密码: ${password:--}"
+    echo "  协议: $(IFS=', '; echo "${selected_protocols[*]}")"
 
     # Generate share links
     for proto in "${selected_protocols[@]}"; do

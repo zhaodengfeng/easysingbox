@@ -2,10 +2,7 @@
 # protocols/tuic.sh
 
 prompt_tuic() {
-    read -rp "请输入域名: " TUIC_DOMAIN
-    while ! validate_domain "$TUIC_DOMAIN"; do
-        read -rp "域名格式无效，请重新输入: " TUIC_DOMAIN
-    done
+    prompt_domain TUIC_DOMAIN "tuic"
 
     ensure_certificate "$TUIC_DOMAIN" || return 1
 

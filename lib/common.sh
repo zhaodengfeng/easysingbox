@@ -1,6 +1,38 @@
 #!/usr/bin/env bash
 # lib/common.sh — 公共函数库
 
+# ─── Colors ───────────────────────────────────────────────────────────────
+
+if [[ -t 1 ]]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    CYAN='\033[0;36m'
+    BOLD='\033[1m'
+    DIM='\033[2m'
+    NC='\033[0m'
+else
+    RED='' GREEN='' YELLOW='' BLUE='' CYAN='' BOLD='' DIM='' NC=''
+fi
+
+color_status() {
+    case "$1" in
+        运行中) printf "${GREEN}运行中${NC}" ;;
+        已停止) printf "${YELLOW}已停止${NC}" ;;
+        异常)   printf "${RED}异常${NC}" ;;
+        启动中) printf "${YELLOW}启动中${NC}" ;;
+        *)      printf "%s" "$1" ;;
+    esac
+}
+
+info()  { echo -e "${CYAN}▸${NC} $*"; }
+ok()    { echo -e "${GREEN}✓${NC} $*"; }
+warn()  { echo -e "${YELLOW}⚠${NC} $*"; }
+err()   { echo -e "${RED}✗${NC} $*"; }
+
+pause_continue() { read -rp "$(echo -e "${DIM}按回车键继续...${NC}")" _; }
+
 # ─── System Detection ────────────────────────────────────────────────────
 
 detect_arch() {
@@ -166,6 +198,77 @@ validate_email() {
     local email="$1"
     # 邮箱格式基础验证
     [[ "$email" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]
+}
+
+# ─── Domain Memory ────────────────────────────────────────────────────────
+
+save_domain() {
+    local domain="$1"
+    local protocol="${2:-}"
+    [[ -z "$domain" ]] && return
+    init_state
+    # Add to known_domains array if not present
+    jq --arg d "$domain" '
+        .known_domains = ((.known_domains // []) | if index($d) then . else . + [$d] end)
+    ' "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+}
+
+get_known_domains() {
+    [[ -f "$STATE_FILE" ]] || return
+    jq -r '.known_domains // [] | .[]' "$STATE_FILE" 2>/dev/null
+}
+
+# Prompt for domain with memory: shows known domains first, allows new input
+prompt_domain() {
+    local var_name="$1"        # variable name to set (via nameref)
+    local protocol="${2:-}"
+
+    local known
+    known=$(get_known_domains)
+
+    if [[ -n "$known" ]]; then
+        echo ""
+        echo -e "${BOLD}已知域名:${NC}"
+        local i=1
+        while IFS= read -r d; do
+            # Show which protocols use this domain
+            local used_by=""
+            if [[ -f "$STATE_FILE" ]]; then
+                used_by=$(jq -r --arg d "$d" '
+                    [.protocols | to_entries[] | select(.value.domain == $d) | .key] | join(", ")
+                ' "$STATE_FILE" 2>/dev/null)
+            fi
+            if [[ -n "$used_by" ]]; then
+                echo -e "  ${BOLD}${i}.${NC} ${d} ${DIM}(${used_by})${NC}"
+            else
+                echo -e "  ${BOLD}${i}.${NC} ${d}"
+            fi
+            i=$((i + 1))
+        done <<< "$known"
+        echo -e "  ${BOLD}${i}.${NC} 输入新域名"
+        echo ""
+        read -rp "选择 [默认: 1]: " domain_choice
+        domain_choice="${domain_choice:-1}"
+
+        local domain_count
+        domain_count=$(echo "$known" | wc -l | tr -d ' ')
+
+        if [[ "$domain_choice" =~ ^[0-9]+$ ]] && (( domain_choice >= 1 && domain_choice <= domain_count )); then
+            local selected
+            selected=$(echo "$known" | sed -n "${domain_choice}p")
+            eval "$var_name=\"$selected\""
+            return 0
+        fi
+    fi
+
+    # New domain input
+    local domain
+    read -rp "请输入域名: " domain
+    while ! validate_domain "$domain"; do
+        read -rp "域名格式无效，请重新输入: " domain
+    done
+    save_domain "$domain"
+    eval "$var_name=\"$domain\""
 }
 
 # ─── Atomic Write ─────────────────────────────────────────────────────────

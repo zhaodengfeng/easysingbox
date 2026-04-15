@@ -2,10 +2,7 @@
 # protocols/trojan.sh
 
 prompt_trojan() {
-    read -rp "请输入域名: " TROJAN_DOMAIN
-    while ! validate_domain "$TROJAN_DOMAIN"; do
-        read -rp "域名格式无效，请重新输入: " TROJAN_DOMAIN
-    done
+    prompt_domain TROJAN_DOMAIN "trojan"
 
     ensure_certificate "$TROJAN_DOMAIN" || return 1
 

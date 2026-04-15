@@ -2,10 +2,7 @@
 # protocols/vless-grpc.sh
 
 prompt_vless_grpc() {
-    read -rp "请输入域名: " VLESS_GRPC_DOMAIN
-    while ! validate_domain "$VLESS_GRPC_DOMAIN"; do
-        read -rp "域名格式无效，请重新输入: " VLESS_GRPC_DOMAIN
-    done
+    prompt_domain VLESS_GRPC_DOMAIN "vless-grpc"
 
     ensure_certificate "$VLESS_GRPC_DOMAIN" || return 1
 

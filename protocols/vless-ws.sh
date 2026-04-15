@@ -2,10 +2,7 @@
 # protocols/vless-ws.sh
 
 prompt_vless_ws() {
-    read -rp "请输入域名: " VLESS_WS_DOMAIN
-    while ! validate_domain "$VLESS_WS_DOMAIN"; do
-        read -rp "域名格式无效，请重新输入: " VLESS_WS_DOMAIN
-    done
+    prompt_domain VLESS_WS_DOMAIN "vless-ws"
 
     ensure_certificate "$VLESS_WS_DOMAIN" || return 1
 
