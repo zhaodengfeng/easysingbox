@@ -2,11 +2,15 @@
 
 sing-box 代理协议一键部署脚本，支持 10 种协议、多用户管理、流量统计与限额管控。
 
+**当前版本**: v0.3.0
+
 ## 特性
 
 - **10 种代理协议**: VLESS-Reality、VLESS-WS、VLESS-gRPC、VMess-WS、Trojan、Shadowsocks、ShadowTLS、Hysteria 2、TUIC v5、AnyTLS
-- **扁平化菜单**: 清晰的 5 项主菜单 + 协议控制组合快捷键，支持字母快捷键
-- **一键更新**: 内置脚本自更新功能，在「系统管理」子菜单中触发
+- **扁平化菜单**: 主菜单状态摘要 + 协议/用户单层快捷操作，支持字母快捷键
+- **CLI 子命令**: 支持 `install/user/restart/stop/start/share/traffic` 免交互操作
+- **域名记忆**: 安装相同域名的协议时可直接复用历史域名
+- **一键更新**: 内置脚本自更新功能，在「系统管理」中触发
 - **环境检测**: 安装前自动检测操作系统、架构、依赖、网络、防火墙、端口占用，缺失依赖自动安装
 - **多用户管理**: 添加/删除/启用/禁用用户，支持用户跨协议使用
 - **流量统计**: cron 每 5 分钟自动采集，月度/累计流量统计
@@ -52,7 +56,9 @@ sudo easysingbox
 ## 管理菜单
 
 ```
-EasySingBox v0.2.5
+EasySingBox v0.3.0
+
+主菜单顶部会显示运行状态摘要、用户数和月流量。
 
 ┌─────────────────────────────────────┐
 │  【1】安装协议                      │
@@ -64,7 +70,7 @@ EasySingBox v0.2.5
 └─────────────────────────────────────┘
 ```
 
-### 安装协议子菜单
+### 安装协议菜单
 
 ```
   1.  VLESS + Reality     (无需域名)
@@ -81,16 +87,26 @@ EasySingBox v0.2.5
   0.  返回主菜单
 ```
 
-### 协议控制子菜单
+### 协议控制菜单
 
 ```
-快速操作: [编号][s]启停 [r]重启 [q]链接 [u]卸载
+快速操作: [编号]查看详情、`r[编号]` 重启、`s[编号]` 启停切换
 
   s.  查看所有协议状态
   0.  返回主菜单
 ```
 
-### 系统管理子菜单
+### 用户管理菜单
+
+用户列表页支持内联快捷操作：
+
+- `a` 添加用户
+- `d[编号]` 删除用户
+- `t[编号]` 封禁/解封用户
+- `r[编号]` 重置流量
+- `l[编号]` 设置流量限额
+
+### 系统管理菜单
 
 ```
   1.  更新脚本
@@ -98,6 +114,30 @@ EasySingBox v0.2.5
   3.  彻底卸载所有服务并删除脚本
 
   0.  返回主菜单
+```
+
+## CLI 子命令
+
+```bash
+# 安装协议
+sudo easysingbox install hysteria2
+
+# 用户管理
+sudo easysingbox user add alice
+sudo easysingbox user del alice
+sudo easysingbox user list
+
+# 服务管理
+sudo easysingbox restart all
+sudo easysingbox stop vless-ws
+sudo easysingbox start trojan
+
+# 分享与流量
+sudo easysingbox share alice hysteria2
+sudo easysingbox traffic alice
+
+# 状态
+sudo easysingbox --status
 ```
 
 ## 支持的系统
