@@ -77,6 +77,13 @@ ensure_ipv6() {
 
 # ─── Utilities ────────────────────────────────────────────────────────────
 
+# JSON file atomic update helper: json_update FILE JQ_ARGS...
+json_update() {
+    local file="$1"; shift
+    local tmp="${file}.tmp"
+    jq "$@" "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
 gen_uuid() {
     if command -v uuidgen &>/dev/null; then
         uuidgen | tr '[:upper:]' '[:lower:]'
@@ -91,12 +98,16 @@ gen_password() {
     openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c "$len"
 }
 
+gen_api_secret() {
+    openssl rand -hex 16
+}
+
 gen_port() {
     local min=${1:-10000}
     local max=${2:-65535}
     local i=0
     while (( i < 1000 )); do
-        local port=$(( RANDOM % (max - min + 1) + min ))
+        local port=$(( $(od -An -N4 -tu4 /dev/urandom | tr -d ' ') % (max - min + 1) + min ))
         if ! ss -tlnp 2>/dev/null | grep -q ":${port} " && \
            ! ss -ulnp 2>/dev/null | grep -q ":${port} "; then
             echo "$port"
@@ -287,7 +298,7 @@ request_acme_cert() {
     # Check if acme.sh is installed and its directory exists
     if ! command -v acme.sh &>/dev/null || [[ ! -d "$HOME/.acme.sh" ]]; then
         echo "正在安装 acme.sh ..."
-        curl -fsSL https://get.acme.sh | sh -s email=test@example.com \
+        curl -fsSL https://get.acme.sh | sh \
             || { echo "acme.sh 安装失败"; return 1; }
         export PATH="$HOME/.acme.sh:$PATH"
     fi
@@ -315,7 +326,8 @@ request_acme_cert() {
             --key-file "${TLS_DIR}/${domain}.key" \
             --fullchain-file "${TLS_DIR}/${domain}.crt" 2>&1 || true
         if [[ -f "${TLS_DIR}/${domain}.crt" ]]; then
-            chmod 644 "${TLS_DIR}/${domain}.crt" "${TLS_DIR}/${domain}.key"
+            chmod 644 "${TLS_DIR}/${domain}.crt"
+            chmod 600 "${TLS_DIR}/${domain}.key"
             echo "证书申请成功"
             return 0
         fi
@@ -349,7 +361,8 @@ use_existing_certificate() {
     mkdir -p "$TLS_DIR"
     cp "$cert_path" "${TLS_DIR}/${domain}.crt"
     cp "$key_path" "${TLS_DIR}/${domain}.key"
-    chmod 644 "${TLS_DIR}/${domain}.crt" "${TLS_DIR}/${domain}.key"
+    chmod 644 "${TLS_DIR}/${domain}.crt"
+    chmod 600 "${TLS_DIR}/${domain}.key"
     echo "证书已复制到 ${TLS_DIR}/${domain}.{crt,key}"
     return 0
 }

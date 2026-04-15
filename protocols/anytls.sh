@@ -28,6 +28,9 @@ install_anytls() {
     local api_port
     api_port=$(get_api_port "anytls")
 
+    local api_secret
+    api_secret=$(gen_api_secret)
+
     local listen_addr
     listen_addr=$(get_listen_address)
 
@@ -38,6 +41,7 @@ install_anytls() {
         --arg key "${TLS_DIR}/${ANYTLS_DOMAIN}.key" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg api_secret "$api_secret" \
         --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
@@ -59,14 +63,16 @@ install_anytls() {
                 clash_api: {
                     external_controller: ("127.0.0.1:" + ($api_port | tostring)),
                     external_ui: "",
-                    secret: ""
+                    secret: $api_secret
                 }
             }
         }' > "$config_file"
 
     write_service "anytls"
     start_service "anytls"
-    wait_service_start "anytls" 10
+    if ! wait_service_start "anytls" 10; then
+        echo "警告: AnyTLS 服务启动失败，请使用 journalctl -u singbox-anytls -n 50 查看日志"
+    fi
     set_protocol_state "anytls" "$ANYTLS_PORT" "running" "$ANYTLS_DOMAIN"
 
     read -rp "请输入默认用户名 (留空为 default): " default_username
@@ -83,5 +89,5 @@ install_anytls() {
     echo "端口: $ANYTLS_PORT"
     echo "密码: $password"
     echo ""
-    cat "${CONFIG_DIR}/anytls/share-link/default.txt" 2>/dev/null
+    cat "${CONFIG_DIR}/anytls/share-link/${default_username}.txt" 2>/dev/null
 }

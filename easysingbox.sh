@@ -37,16 +37,45 @@ source "${INSTALL_DIR}/protocols/anytls.sh"
 # ─── Entry ───────────────────────────────────────────────────────────────
 
 main() {
-    # If called with --collect-traffic, run silently
-    if [[ "${1:-}" == "--collect-traffic" ]]; then
-        collect_all_traffic
-        check_traffic_limits
-        exit 0
-    fi
-    if [[ "${1:-}" == "--monthly-reset" ]]; then
-        monthly_traffic_reset
-        exit 0
-    fi
+    # Command-line flags
+    case "${1:-}" in
+        --collect-traffic)
+            collect_all_traffic
+            check_traffic_limits
+            exit 0
+            ;;
+        --monthly-reset)
+            monthly_traffic_reset
+            exit 0
+            ;;
+        --version|-v)
+            echo "EasySingBox v${VERSION}"
+            exit 0
+            ;;
+        --help|-h)
+            echo "EasySingBox v${VERSION} — sing-box 代理协议一键部署"
+            echo ""
+            echo "用法: easysingbox [选项]"
+            echo ""
+            echo "选项:"
+            echo "  --help, -h              显示帮助信息"
+            echo "  --version, -v           显示版本号"
+            echo "  --status                显示所有协议状态"
+            echo "  --collect-traffic       采集流量 (cron 调用)"
+            echo "  --monthly-reset         月度流量重置 (cron 调用)"
+            echo ""
+            echo "无参数运行进入交互菜单。"
+            exit 0
+            ;;
+        --status)
+            if [[ $EUID -ne 0 ]]; then
+                echo "请使用 root 用户运行此脚本"
+                exit 1
+            fi
+            show_all_status
+            exit 0
+            ;;
+    esac
 
     if [[ $EUID -ne 0 ]]; then
         echo "请使用 root 用户运行此脚本"
@@ -71,7 +100,7 @@ main() {
             4) menu_traffic_management ;;
             5) menu_system_management ;;
             0) echo "Bye!"; exit 0 ;;
-            *)  echo "无效选项" ;;
+            *) echo "无效选项"; sleep 1 ;;
         esac
     done
 }
@@ -112,7 +141,8 @@ menu_install_protocol() {
             8)  install_protocol "hysteria2" ; read -rp "按回车键继续..." _ ;;
             9)  install_protocol "tuic" ; read -rp "按回车键继续..." _ ;;
             10) install_protocol "anytls" ; read -rp "按回车键继续..." _ ;;
-            0|*) return ;;
+            0) return ;;
+            *) echo "无效选项"; sleep 1 ;;
         esac
     done
 }
@@ -352,7 +382,8 @@ menu_user_management() {
             4) reset_user_traffic ;;
             5) set_user_traffic_limit ;;
             6) list_users ;;
-            0|*) return ;;
+            0) return ;;
+            *) echo "无效选项"; sleep 1 ;;
         esac
     done
 }
@@ -378,7 +409,8 @@ menu_traffic_management() {
             1) show_monthly_traffic "$(date +%Y-%m)" ;;
             2) show_total_traffic ;;
             3) show_history_months ;;
-            0|*) return ;;
+            0) return ;;
+            *) echo "无效选项"; sleep 1 ;;
         esac
     done
 }
@@ -404,7 +436,8 @@ menu_system_management() {
             1) update_self ;;
             2) upgrade_singbox_menu ;;
             3) uninstall_all ;;
-            0|*) return ;;
+            0) return ;;
+            *) echo "无效选项"; sleep 1 ;;
         esac
     done
 }
@@ -420,7 +453,11 @@ uninstall_all() {
     echo ""
 
     echo "正在停止所有 sing-box 服务 ..."
-    systemctl stop 'singbox-*' 2>/dev/null || true
+    if [[ -f "$STATE_FILE" ]]; then
+        for protocol in $(jq -r '.protocols | keys[]' "$STATE_FILE" 2>/dev/null); do
+            stop_service "$protocol"
+        done
+    fi
 
     # Remove hysteria2 port hopping rules if present
     if [[ -f "$STATE_FILE" ]]; then
@@ -558,8 +595,12 @@ is_protocol_installed() {
     [[ -f "$STATE_FILE" ]] && jq -e --arg proto "$protocol" '.protocols | has($proto)' "$STATE_FILE" &>/dev/null
 }
 
+_SERVER_IP=""
 get_server_ip() {
-    curl -s --max-time 5 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}'
+    if [[ -z "$_SERVER_IP" ]]; then
+        _SERVER_IP=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
+    fi
+    echo "$_SERVER_IP"
 }
 
 # ─── Service Management Functions ──────────────────────────────────────────────
@@ -623,31 +664,6 @@ do_uninstall_protocol() {
         "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
 
     echo "协议 $protocol 已卸载"
-}
-
-uninstall_protocol() {
-    if [[ ! -f "$STATE_FILE" ]]; then
-        echo "尚未安装任何协议"
-        return
-    fi
-
-    local protocols
-    protocols=$(jq -r '.protocols | keys[]' "$STATE_FILE" 2>/dev/null)
-    [[ -z "$protocols" ]] && { echo "尚未安装任何协议"; return; }
-
-    clear
-    echo "已安装的协议:"
-    echo "$protocols" | nl -w2 -s'. '
-    echo ""
-    read -rp "选择要卸载的协议编号 (0 返回): " idx
-    idx=$(echo "$idx" | tr -d ' ')
-    [[ "$idx" == "0" ]] && return
-
-    local protocol
-    protocol=$(echo "$protocols" | sed -n "${idx}p")
-    [[ -z "$protocol" ]] && { echo "无效选择"; return; }
-
-    do_uninstall_protocol "$protocol"
 }
 
 main "$@"

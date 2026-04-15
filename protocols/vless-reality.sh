@@ -77,6 +77,9 @@ install_vless_reality() {
     local api_port
     api_port=$(get_api_port "vless-reality")
 
+    local api_secret
+    api_secret=$(gen_api_secret)
+
     local listen_addr
     listen_addr=$(get_listen_address)
 
@@ -87,6 +90,7 @@ install_vless_reality() {
         --arg short_id "$short_id" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg api_secret "$api_secret" \
         --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
@@ -112,7 +116,7 @@ install_vless_reality() {
                 clash_api: {
                     external_controller: ("127.0.0.1:" + ($api_port | tostring)),
                     external_ui: "",
-                    secret: ""
+                    secret: $api_secret
                 }
             }
         }' > "$config_file"
@@ -122,7 +126,9 @@ install_vless_reality() {
 
     # Start
     start_service "vless-reality"
-    wait_service_start "vless-reality" 10
+    if ! wait_service_start "vless-reality" 10; then
+        echo "警告: VLESS Reality 服务启动失败，请使用 journalctl -u singbox-vless-reality -n 50 查看日志"
+    fi
 
     # Update state
     set_protocol_state "vless-reality" "$VLESS_REALITY_PORT" "running"
@@ -156,5 +162,5 @@ install_vless_reality() {
     echo "Short ID: $short_id"
     echo ""
     echo "分享链接:"
-    cat "${CONFIG_DIR}/vless-reality/share-link/default.txt" 2>/dev/null
+    cat "${CONFIG_DIR}/vless-reality/share-link/${default_username}.txt" 2>/dev/null
 }

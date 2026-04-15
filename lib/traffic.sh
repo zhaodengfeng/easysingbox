@@ -46,9 +46,22 @@ collect_all_traffic() {
         local api_port
         api_port=$(get_api_port "$protocol")
 
+        # 读取 clash_api secret
+        local api_secret=""
+        local config_file="${CONFIG_DIR}/${protocol}/inbound.json"
+        if [[ -f "$config_file" ]]; then
+            api_secret=$(jq -r '.experimental.clash_api.secret // ""' "$config_file" 2>/dev/null)
+        fi
+        local auth_header=""
+        [[ -n "$api_secret" ]] && auth_header="Authorization: Bearer ${api_secret}"
+
         # 获取当前活跃连接总流量
         local connections total_up=0 total_down=0
-        connections=$(curl -s --max-time 5 "http://127.0.0.1:${api_port}/connections" 2>/dev/null || echo '{}')
+        if [[ -n "$auth_header" ]]; then
+            connections=$(curl -s --max-time 5 -H "$auth_header" "http://127.0.0.1:${api_port}/connections" 2>/dev/null || echo '{}')
+        else
+            connections=$(curl -s --max-time 5 "http://127.0.0.1:${api_port}/connections" 2>/dev/null || echo '{}')
+        fi
 
         if [[ "$connections" != "{}" ]] && [[ -n "$connections" ]]; then
             total_up=$(echo "$connections" | jq '[.connections // [] | .[]? | .upload // 0] | add // 0' 2>/dev/null || echo 0)
@@ -145,7 +158,9 @@ check_traffic_limits() {
 
     [[ -z "$check_data" ]] && return 0
 
-    echo "$check_data" | while IFS='|' read -r username used_month limit_month used_total limit_total protos; do
+    # 收集需要封禁的用户
+    local block_users=()
+    while IFS='|' read -r username used_month limit_month used_total limit_total protos; do
         local blocked=false
         if [[ "$limit_month" != "0" ]] && (( used_month > limit_month )); then
             blocked=true
@@ -157,18 +172,25 @@ check_traffic_limits() {
         fi
 
         if $blocked; then
-            local now
-            now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-            jq --arg name "$username" --arg now "$now" \
-                '(.users[] | select(.name == $name)).blocked_at = $now' \
-                "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+            block_users+=("$username|$protos")
+        fi
+    done <<< "$check_data"
 
-            # 重建受影响的协议
-            if [[ -n "$protos" ]]; then
-                for proto in $(echo "$protos" | tr ',' ' '); do
-                    rebuild_protocol_config "$proto"
-                done
-            fi
+    # 批量处理封禁
+    for entry in "${block_users[@]}"; do
+        local username="${entry%%|*}"
+        local protos="${entry#*|}"
+        local now
+        now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        jq --arg name "$username" --arg now "$now" \
+            '(.users[] | select(.name == $name)).blocked_at = $now' \
+            "$USERS_FILE" > "${USERS_FILE}.tmp" && mv "${USERS_FILE}.tmp" "$USERS_FILE"
+
+        # 重建受影响的协议
+        if [[ -n "$protos" ]]; then
+            for proto in $(echo "$protos" | tr ',' ' '); do
+                rebuild_protocol_config "$proto"
+            done
         fi
     done
 }
@@ -188,7 +210,7 @@ monthly_traffic_reset() {
     user_data=$(jq -r '.users[] | "\(.name)|\(.monthly_reset_day)|\(.last_monthly_reset // "")|\(.blocked_at)|\(.protocols | join(","))"' "$USERS_FILE" 2>/dev/null)
     [[ -z "$user_data" ]] && return 0
 
-    echo "$user_data" | while IFS='|' read -r username reset_day last_reset was_blocked protos; do
+    while IFS='|' read -r username reset_day last_reset was_blocked protos; do
         if [[ "$day" == "$reset_day" ]] && [[ "$last_reset" != "$month" ]]; then
             # 重置月度用量
             jq --arg name "$username" --arg month "$month" \
@@ -212,31 +234,10 @@ monthly_traffic_reset() {
                 echo "[月度重置] 用户 $username 月度流量已重置"
             fi
         fi
-    done
+    done <<< "$user_data"
 }
 
 # ─── View Traffic Stats ───────────────────────────────────────────────────
-
-view_traffic_stats() {
-    local month
-    month=$(date +%Y-%m)
-
-    echo "流量统计"
-    echo "  1. 本月流量 ($month)"
-    echo "  2. 累计总流量"
-    echo "  3. 历史月份"
-    echo "  0. 返回"
-    echo ""
-    read -rp "请选择: " choice
-
-    case "$choice" in
-        1) show_monthly_traffic "$month" ;;
-        2) show_total_traffic ;;
-        3) show_history_months ;;
-        0) ;;
-        *) echo "无效选项" ;;
-    esac
-}
 
 show_monthly_traffic() {
     local month="${1:-$(date +%Y-%m)}"

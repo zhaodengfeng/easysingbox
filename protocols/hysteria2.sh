@@ -145,6 +145,9 @@ install_hysteria2() {
     local api_port
     api_port=$(get_api_port "hysteria2")
 
+    local api_secret
+    api_secret=$(gen_api_secret)
+
     local listen_addr
     listen_addr=$(get_listen_address)
 
@@ -155,6 +158,7 @@ install_hysteria2() {
         --arg key "${TLS_DIR}/${HY2_DOMAIN}.key" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg api_secret "$api_secret" \
         --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
@@ -177,7 +181,7 @@ install_hysteria2() {
                 clash_api: {
                     external_controller: ("127.0.0.1:" + ($api_port | tostring)),
                     external_ui: "",
-                    secret: ""
+                    secret: $api_secret
                 }
             }
         }' > "$config_file"
@@ -222,5 +226,5 @@ install_hysteria2() {
         echo "端口跳跃: ${HY2_HOP_START}-${HY2_HOP_END}"
     fi
     echo ""
-    cat "${CONFIG_DIR}/hysteria2/share-link/default.txt" 2>/dev/null
+    cat "${CONFIG_DIR}/hysteria2/share-link/${default_username}.txt" 2>/dev/null
 }

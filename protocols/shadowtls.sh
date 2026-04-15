@@ -30,6 +30,9 @@ install_shadowtls() {
     local api_port
     api_port=$(get_api_port "shadowtls")
 
+    local api_secret
+    api_secret=$(gen_api_secret)
+
     local listen_addr
     listen_addr=$(get_listen_address)
 
@@ -43,6 +46,7 @@ install_shadowtls() {
         --arg key "${TLS_DIR}/${SHADOWTLS_DOMAIN}.key" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg api_secret "$api_secret" \
         --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
@@ -77,14 +81,16 @@ install_shadowtls() {
                 clash_api: {
                     external_controller: ("127.0.0.1:" + ($api_port | tostring)),
                     external_ui: "",
-                    secret: ""
+                    secret: $api_secret
                 }
             }
         }' > "$config_file"
 
     write_service "shadowtls"
     start_service "shadowtls"
-    wait_service_start "shadowtls" 10
+    if ! wait_service_start "shadowtls" 10; then
+        echo "警告: ShadowTLS 服务启动失败，请使用 journalctl -u singbox-shadowtls -n 50 查看日志"
+    fi
     set_protocol_state "shadowtls" "$SHADOWTLS_PORT" "running" "$SHADOWTLS_DOMAIN"
 
     read -rp "请输入默认用户名 (留空为 default): " default_username
@@ -104,5 +110,5 @@ install_shadowtls() {
     echo "SS 密码: $ss_password"
     echo "ST 密码: $st_password"
     echo ""
-    cat "${CONFIG_DIR}/shadowtls/share-link/default.txt" 2>/dev/null
+    cat "${CONFIG_DIR}/shadowtls/share-link/${default_username}.txt" 2>/dev/null
 }

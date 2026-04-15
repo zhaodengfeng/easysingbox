@@ -36,6 +36,9 @@ install_shadowsocks() {
     local api_port
     api_port=$(get_api_port "shadowsocks")
 
+    local api_secret
+    api_secret=$(gen_api_secret)
+
     local listen_addr
     listen_addr=$(get_listen_address)
 
@@ -45,6 +48,7 @@ install_shadowsocks() {
         --arg server_pw "$server_password" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg api_secret "$api_secret" \
         --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
@@ -62,14 +66,16 @@ install_shadowsocks() {
                 clash_api: {
                     external_controller: ("127.0.0.1:" + ($api_port | tostring)),
                     external_ui: "",
-                    secret: ""
+                    secret: $api_secret
                 }
             }
         }' > "$config_file"
 
     write_service "shadowsocks"
     start_service "shadowsocks"
-    wait_service_start "shadowsocks" 10
+    if ! wait_service_start "shadowsocks" 10; then
+        echo "警告: Shadowsocks 服务启动失败，请使用 journalctl -u singbox-shadowsocks -n 50 查看日志"
+    fi
     set_protocol_state "shadowsocks" "$SS_PORT" "running"
 
     read -rp "请输入默认用户名 (留空为 default): " default_username
@@ -89,5 +95,5 @@ install_shadowsocks() {
     echo "加密: $SS_METHOD"
     echo "密码: $user_password"
     echo ""
-    cat "${CONFIG_DIR}/shadowsocks/share-link/default.txt" 2>/dev/null
+    cat "${CONFIG_DIR}/shadowsocks/share-link/${default_username}.txt" 2>/dev/null
 }

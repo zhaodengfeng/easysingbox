@@ -31,6 +31,9 @@ install_vmess_ws() {
     local api_port
     api_port=$(get_api_port "vmess-ws")
 
+    local api_secret
+    api_secret=$(gen_api_secret)
+
     local listen_addr
     listen_addr=$(get_listen_address)
 
@@ -42,6 +45,7 @@ install_vmess_ws() {
         --arg key "${TLS_DIR}/${VMESS_WS_DOMAIN}.key" \
         --argjson users "[$default_user]" \
         --argjson api_port "$api_port" \
+        --arg api_secret "$api_secret" \
         --arg listen_addr "$listen_addr" \
         '{
             log: { level: "info", timestamp: true },
@@ -67,14 +71,16 @@ install_vmess_ws() {
                 clash_api: {
                     external_controller: ("127.0.0.1:" + ($api_port | tostring)),
                     external_ui: "",
-                    secret: ""
+                    secret: $api_secret
                 }
             }
         }' > "$config_file"
 
     write_service "vmess-ws"
     start_service "vmess-ws"
-    wait_service_start "vmess-ws" 10
+    if ! wait_service_start "vmess-ws" 10; then
+        echo "警告: VMess WS 服务启动失败，请使用 journalctl -u singbox-vmess-ws -n 50 查看日志"
+    fi
     set_protocol_state "vmess-ws" "$VMESS_WS_PORT" "running" "$VMESS_WS_DOMAIN"
 
     read -rp "请输入默认用户名 (留空为 default): " default_username
@@ -92,5 +98,5 @@ install_vmess_ws() {
     echo "路径: $VMESS_WS_PATH"
     echo "UUID: $uuid"
     echo ""
-    cat "${CONFIG_DIR}/vmess-ws/share-link/default.txt" 2>/dev/null
+    cat "${CONFIG_DIR}/vmess-ws/share-link/${default_username}.txt" 2>/dev/null
 }

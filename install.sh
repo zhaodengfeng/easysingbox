@@ -95,7 +95,7 @@ echo ""
 info "正在安装依赖 ..."
 echo ""
 
-declare -A REQUIRED_DEPS=(["jq"]="jq" ["openssl"]="openssl" ["curl"]="curl" ["wget"]="wget" ["cron"]="cron")
+declare -A REQUIRED_DEPS=(["jq"]="jq" ["openssl"]="openssl" ["curl"]="curl" ["wget"]="wget" ["crontab"]="cron")
 declare -A OPTIONAL_DEPS=(["qrencode"]="qrencode")
 
 get_pkg_name() {
@@ -129,16 +129,17 @@ for cmd in "${!REQUIRED_DEPS[@]}"; do
     fi
 done
 
+MISSING_OPTIONAL=()
 for cmd in "${!OPTIONAL_DEPS[@]}"; do
     if command -v "$cmd" &>/dev/null; then
         ok "$cmd: 已安装"
     else
-        MISSING_REQUIRED+=("$cmd")
+        MISSING_OPTIONAL+=("$cmd")
     fi
 done
 
 if [[ ${#MISSING_REQUIRED[@]} -gt 0 ]]; then
-    info "正在安装缺失依赖 ..."
+    info "正在安装缺失必要依赖 ..."
     for cmd in "${MISSING_REQUIRED[@]}"; do
         pkg=$(get_pkg_name "$cmd")
         echo -n "  安装 $pkg ... "
@@ -150,7 +151,20 @@ if [[ ${#MISSING_REQUIRED[@]} -gt 0 ]]; then
         fi
     done
 else
-    ok "所有依赖已满足"
+    ok "所有必要依赖已满足"
+fi
+
+if [[ ${#MISSING_OPTIONAL[@]} -gt 0 ]]; then
+    info "正在安装可选依赖 ..."
+    for cmd in "${MISSING_OPTIONAL[@]}"; do
+        pkg=$(get_pkg_name "$cmd")
+        echo -n "  安装 $pkg ... "
+        if install_package "$pkg"; then
+            ok "安装成功"
+        else
+            warn "安装 $pkg 失败（可选依赖，不影响核心功能）"
+        fi
+    done
 fi
 
 # ─── Step 3: Install Files ────────────────────────────────────────────────
